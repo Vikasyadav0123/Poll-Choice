@@ -148,12 +148,36 @@ function renderShareBox(link) {
 
     // copy
     document.getElementById("copyBtn").onclick = () => {
-        navigator.clipboard.writeText(link);
-        document.getElementById("copyBtn").textContent = "✔";
-        setTimeout(() => {
-            document.getElementById("copyBtn").textContent = "📋";
-        }, 1200);
+        const input = document.getElementById("shareLinkInput");
+
+        // select text (important for mobile)
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, 99999); // mobile support
+
+        let copied = false;
+
+        // modern clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(input.value)
+                .then(() => copied = true)
+                .catch(() => copied = false);
+        }
+
+        // fallback (works everywhere)
+        if (!copied) {
+            copied = document.execCommand("copy");
+        }
+
+        const btn = document.getElementById("copyBtn");
+        if (copied) {
+            btn.textContent = "✔";
+            setTimeout(() => (btn.textContent = "📋"), 1200);
+        } else {
+            alert("Copy failed. Please long-press to copy.");
+        }
     };
+
 
     // native share
     const nativeBtn = document.getElementById("nativeShareBtn");

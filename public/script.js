@@ -166,7 +166,10 @@ function renderVotingUI() {
     btn.onclick = submitVote;
 
     submitBox.appendChild(btn);
-    submitBox.appendChild(timerSpan);
+    if (timerSpan) {
+        submitBox.appendChild(timerSpan);
+    }
+
     output.appendChild(submitBox);
 
     renderShareBox();

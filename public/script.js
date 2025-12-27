@@ -117,81 +117,54 @@ async function startPoll() {
 /* =======================
    SHARE UI
 ======================= */
-function renderShareBox(link) {
-    const box = document.createElement("div");
-    box.className = "results-container share-box";
+document.getElementById("copyBtn").onclick = () => {
+    const text = link;
 
-    box.innerHTML = `
-        <h3>🔗 Share this poll</h3>
+    // create hidden textarea
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
 
-        <div class="share-input-row">
-            <input id="shareLinkInput" value="${link}" readonly />
-            <button class="copy-btn" id="copyBtn">📋</button>
-        </div>
+    document.body.appendChild(textarea);
 
-        <div class="share-actions">
-            <a class="share-btn whatsapp"
-               href="https://wa.me/?text=${encodeURIComponent(link)}"
-               target="_blank">WhatsApp</a>
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
 
-            <a class="share-btn telegram"
-               href="https://t.me/share/url?url=${encodeURIComponent(link)}"
-               target="_blank">Telegram</a>
-
-            <button class="share-btn native" id="nativeShareBtn">
-                Share
-            </button>
-        </div>
-    `;
-
-    output.appendChild(box);
-
-    // copy
-    document.getElementById("copyBtn").onclick = () => {
-        const input = document.getElementById("shareLinkInput");
-
-        // select text (important for mobile)
-        input.focus();
-        input.select();
-        input.setSelectionRange(0, 99999); // mobile support
-
-        let copied = false;
-
-        // modern clipboard API
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(input.value)
-                .then(() => copied = true)
-                .catch(() => copied = false);
-        }
-
-        // fallback (works everywhere)
-        if (!copied) {
-            copied = document.execCommand("copy");
-        }
-
-        const btn = document.getElementById("copyBtn");
-        if (copied) {
-            btn.textContent = "✔";
-            setTimeout(() => (btn.textContent = "📋"), 1200);
-        } else {
-            alert("Copy failed. Please long-press to copy.");
-        }
-    };
-
-
-    // native share
-    const nativeBtn = document.getElementById("nativeShareBtn");
-    if (navigator.share) {
-        nativeBtn.onclick = () => {
-            navigator.share({
-                title: "Vote in this poll",
-                url: link
-            });
-        };
-    } else {
-        nativeBtn.style.display = "none";
+    let success = false;
+    try {
+        success = document.execCommand("copy");
+    } catch (err) {
+        success = false;
     }
+
+    document.body.removeChild(textarea);
+
+    const btn = document.getElementById("copyBtn");
+    if (success) {
+        btn.textContent = "✔";
+        setTimeout(() => (btn.textContent = "📋"), 1200);
+    } else {
+        alert("Copy failed. Please long-press the link.");
+    }
+};
+
+
+
+// native share
+const nativeBtn = document.getElementById("nativeShareBtn");
+if (navigator.share) {
+    nativeBtn.onclick = () => {
+        navigator.share({
+            title: "Vote in this poll",
+            url: link
+        });
+    };
+} else {
+    nativeBtn.style.display = "none";
 }
+
 
 
 /* =======================
@@ -280,15 +253,30 @@ async function submitVote() {
    RESULTS
 ======================= */
 function showResults() {
-    output.innerHTML = "<h3>Results</h3>";
+    output.innerHTML = `<h3>Results</h3>`;
 
     const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
 
     pollData.options.forEach(o => {
-        const p = Math.round((o.votes / total) * 100);
-        output.innerHTML += `<p>${o.text}: ${p}% (${o.votes})</p>`;
+        const percent = Math.round((o.votes / total) * 100);
+
+        const box = document.createElement("div");
+        box.className = "result-box";
+
+        box.innerHTML = `
+            <div class="result-top">
+                <span>${o.text}</span>
+                <span>${percent}% (${o.votes})</span>
+            </div>
+            <div class="result-bar">
+                <div class="result-fill" style="width:${percent}%"></div>
+            </div>
+        `;
+
+        output.appendChild(box);
     });
 }
+
 
 /* =======================
    INIT

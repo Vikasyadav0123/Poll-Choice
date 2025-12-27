@@ -119,25 +119,28 @@ async function startPoll() {
 ======================= */
 function renderShareBox(link) {
     const box = document.createElement("div");
-    box.className = "results-container";
+    box.className = "results-container share-box";
 
     box.innerHTML = `
         <h3>🔗 Share this poll</h3>
 
-        <input id="shareLinkInput" value="${link}" readonly />
+        <div class="share-input-row">
+            <input id="shareLinkInput" value="${link}" readonly />
+            <button class="copy-btn" id="copyBtn">📋</button>
+        </div>
 
-        <button class="start-btn" id="copyBtn">Copy Link</button>
-
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-            <a class="start-btn" 
-               href="https://wa.me/?text=${encodeURIComponent(link)}" 
+        <div class="share-actions">
+            <a class="share-btn whatsapp"
+               href="https://wa.me/?text=${encodeURIComponent(link)}"
                target="_blank">WhatsApp</a>
 
-            <a class="start-btn" 
-               href="https://t.me/share/url?url=${encodeURIComponent(link)}" 
+            <a class="share-btn telegram"
+               href="https://t.me/share/url?url=${encodeURIComponent(link)}"
                target="_blank">Telegram</a>
 
-            <button class="start-btn" id="nativeShareBtn">Share</button>
+            <button class="share-btn native" id="nativeShareBtn">
+                Share
+            </button>
         </div>
     `;
 
@@ -146,10 +149,13 @@ function renderShareBox(link) {
     // copy
     document.getElementById("copyBtn").onclick = () => {
         navigator.clipboard.writeText(link);
-        alert("Link copied!");
+        document.getElementById("copyBtn").textContent = "✔";
+        setTimeout(() => {
+            document.getElementById("copyBtn").textContent = "📋";
+        }, 1200);
     };
 
-    // native mobile share
+    // native share
     const nativeBtn = document.getElementById("nativeShareBtn");
     if (navigator.share) {
         nativeBtn.onclick = () => {
@@ -162,6 +168,7 @@ function renderShareBox(link) {
         nativeBtn.style.display = "none";
     }
 }
+
 
 /* =======================
    TIMER

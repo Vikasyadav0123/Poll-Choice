@@ -266,3 +266,63 @@ button.start-btn:disabled {
     background-color: #25d366 !important;
     color: #ffffff !important;
 }
+
+/* =======================
+   SHARE BOX
+======================= */
+.share-box {
+    margin-top: 16px;
+}
+
+/* input + copy */
+.share-input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.share-input-row input {
+    flex: 1;
+}
+
+.copy-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 0 14px;
+    font-size: 16px;
+    cursor: pointer;
+    background: #e9ecef;
+}
+
+/* action buttons row */
+.share-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* base share button */
+.share-btn {
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 14px;
+    color: #fff;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+}
+
+/* WhatsApp */
+.share-btn.whatsapp {
+    background: #25d366;
+}
+
+/* Telegram */
+.share-btn.telegram {
+    background: #229ed9;
+}
+
+/* Native share */
+.share-btn.native {
+    background: #444;
+}

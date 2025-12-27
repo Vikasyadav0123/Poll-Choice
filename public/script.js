@@ -14,7 +14,6 @@ const optionsContainer = document.getElementById("optionsContainer");
    STRONG BROWSER ID
 ======================= */
 const BROWSER_ID_KEY = "poll_browser_id";
-
 let browserId = localStorage.getItem(BROWSER_ID_KEY);
 if (!browserId) {
     browserId = crypto.randomUUID();
@@ -89,7 +88,7 @@ async function startPoll() {
         .filter(Boolean);
 
     if (!question || options.length < 2) {
-        alert("Enter question & 2 options");
+        alert("Enter question & at least 2 options");
         isCreatingPoll = false;
         return;
     }
@@ -100,23 +99,68 @@ async function startPoll() {
     const res = await fetch("/api/polls", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            question,
-            options,
-            browserId
-        })
+        body: JSON.stringify({ question, options, browserId })
     });
 
     const data = await res.json();
     pollData = data.poll;
 
     const shareLink = `${window.location.origin}${data.shareUrl}`;
-    alert(`Share this link:\n${shareLink}`);
+    renderShareBox(shareLink);
 
     renderVoteUI();
     startExpiryTimer();
 
     isCreatingPoll = false;
+}
+
+/* =======================
+   SHARE UI
+======================= */
+function renderShareBox(link) {
+    const box = document.createElement("div");
+    box.className = "results-container";
+
+    box.innerHTML = `
+        <h3>🔗 Share this poll</h3>
+
+        <input id="shareLinkInput" value="${link}" readonly />
+
+        <button class="start-btn" id="copyBtn">Copy Link</button>
+
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a class="start-btn" 
+               href="https://wa.me/?text=${encodeURIComponent(link)}" 
+               target="_blank">WhatsApp</a>
+
+            <a class="start-btn" 
+               href="https://t.me/share/url?url=${encodeURIComponent(link)}" 
+               target="_blank">Telegram</a>
+
+            <button class="start-btn" id="nativeShareBtn">Share</button>
+        </div>
+    `;
+
+    output.appendChild(box);
+
+    // copy
+    document.getElementById("copyBtn").onclick = () => {
+        navigator.clipboard.writeText(link);
+        alert("Link copied!");
+    };
+
+    // native mobile share
+    const nativeBtn = document.getElementById("nativeShareBtn");
+    if (navigator.share) {
+        nativeBtn.onclick = () => {
+            navigator.share({
+                title: "Vote in this poll",
+                url: link
+            });
+        };
+    } else {
+        nativeBtn.style.display = "none";
+    }
 }
 
 /* =======================
@@ -153,7 +197,7 @@ function startExpiryTimer() {
    VOTE UI
 ======================= */
 function renderVoteUI() {
-    output.innerHTML = `<h3>${pollData.question}</h3>`;
+    output.innerHTML += `<h3>${pollData.question}</h3>`;
 
     pollData.options.forEach((opt, i) => {
         const div = document.createElement("div");
@@ -213,30 +257,6 @@ function showResults() {
         const p = Math.round((o.votes / total) * 100);
         output.innerHTML += `<p>${o.text}: ${p}% (${o.votes})</p>`;
     });
-}
-
-/* =======================
-   RESET
-======================= */
-function resetPoll() {
-    if (!confirm("Reset poll?")) return;
-
-    clearInterval(timerInterval);
-    timerInterval = null;
-    timerSpan?.remove();
-    timerSpan = null;
-
-    pollData = null;
-    hasVoted = false;
-    selectedIndexes.clear();
-    localStorage.removeItem("pollExpiry");
-
-    output.innerHTML = "";
-    document.getElementById("questionInput").value = "";
-
-    optionsContainer.innerHTML = "";
-    optionsContainer.appendChild(createOption());
-    optionsContainer.appendChild(createOption());
 }
 
 /* =======================

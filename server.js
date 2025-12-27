@@ -22,12 +22,13 @@ app.get("/", (req, res) => {
    DB CONNECTION
 ======================= */
 mongoose
-    .connect(process.env.MONGO_URI)
+    .connect(process.env.MONGODB_URI)
     .then(() => console.log("✅ MongoDB connected"))
     .catch(err => {
         console.error("❌ MongoDB error:", err);
         process.exit(1);
     });
+
 
 /* =======================
    SCHEMA

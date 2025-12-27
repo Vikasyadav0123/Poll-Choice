@@ -100,10 +100,19 @@ async function startPoll() {
     const res = await fetch("/api/polls", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, options })
+        body: JSON.stringify({
+            question,
+            options,
+            browserId
+        })
     });
 
-    pollData = await res.json();
+    const data = await res.json();
+    pollData = data.poll;
+
+    const shareLink = `${window.location.origin}${data.shareUrl}`;
+    alert(`Share this link:\n${shareLink}`);
+
     renderVoteUI();
     startExpiryTimer();
 
@@ -168,7 +177,7 @@ function toggleSelect(i, el) {
 }
 
 /* =======================
-   SUBMIT VOTE (LOCKED)
+   SUBMIT VOTE
 ======================= */
 async function submitVote() {
     if (hasVoted) return;

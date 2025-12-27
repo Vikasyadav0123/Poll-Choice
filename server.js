@@ -18,11 +18,13 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+app.get("/poll/:id", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "poll.html"));
+});
+
 /* =======================
    DB CONNECTION
 ======================= */
-console.log("MONGO_URI =", process.env.MONGO_URI);
-
 mongoose
     .connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB connected"))
@@ -30,7 +32,6 @@ mongoose
         console.error("❌ MongoDB error:", err);
         process.exit(1);
     });
-
 
 /* =======================
    SCHEMA
@@ -43,7 +44,14 @@ const PollSchema = new mongoose.Schema({
             votes: { type: Number, default: 0 }
         }
     ],
-    // 🔒 STRONG LOCK
+
+    // 🔐 CREATOR AUTHORITY
+    createdBy: {
+        type: String,
+        required: true
+    },
+
+    // 🔒 ONE VOTE PER BROWSER
     votedBy: {
         type: [String],
         default: []
@@ -57,7 +65,11 @@ const Poll = mongoose.model("Poll", PollSchema);
 ======================= */
 app.post("/api/polls", async (req, res) => {
     try {
-        const { question, options } = req.body;
+        const { question, options, browserId } = req.body;
+
+        if (!browserId) {
+            return res.status(400).json({ error: "Missing browser ID" });
+        }
 
         if (!question || !Array.isArray(options) || options.length < 2) {
             return res.status(400).json({ error: "Invalid poll data" });
@@ -65,17 +77,34 @@ app.post("/api/polls", async (req, res) => {
 
         const poll = await Poll.create({
             question,
-            options: options.map(text => ({ text }))
+            options: options.map(text => ({ text })),
+            createdBy: browserId
         });
 
-        res.status(201).json(poll);
+        res.status(201).json({
+            poll,
+            shareUrl: `/poll/${poll._id}`
+        });
     } catch {
         res.status(500).json({ error: "Create poll failed" });
     }
 });
 
 /* =======================
-   VOTE (BACKEND LOCKED)
+   GET POLL (READ ONLY)
+======================= */
+app.get("/api/polls/:id", async (req, res) => {
+    try {
+        const poll = await Poll.findById(req.params.id);
+        if (!poll) return res.status(404).json({ error: "Poll not found" });
+        res.json(poll);
+    } catch {
+        res.status(500).json({ error: "Fetch failed" });
+    }
+});
+
+/* =======================
+   VOTE (LOCKED)
 ======================= */
 app.post("/api/polls/:id/vote", async (req, res) => {
     try {
@@ -90,11 +119,8 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         }
 
         const poll = await Poll.findById(req.params.id);
-        if (!poll) {
-            return res.status(404).json({ error: "Poll not found" });
-        }
+        if (!poll) return res.status(404).json({ error: "Poll not found" });
 
-        // 🔒 STRONG CHECK
         if (poll.votedBy.includes(browserId)) {
             return res.status(403).json({ error: "Already voted" });
         }
@@ -109,7 +135,6 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         await poll.save();
 
         res.json(poll);
-
     } catch {
         res.status(500).json({ error: "Vote failed" });
     }
@@ -120,5 +145,5 @@ app.post("/api/polls/:id/vote", async (req, res) => {
 ======================= */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-    console.log(`🚀 Server running at http://localhost:${PORT}`)
+    console.log(`🚀 Server running on port ${PORT}`)
 );

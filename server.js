@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const path = require("path");
-const crypto = require("crypto");
 
 const app = express();
 
@@ -41,13 +40,14 @@ const PollSchema = new mongoose.Schema({
             votes: { type: Number, default: 0 }
         }
     ],
-    votedBy: { type: [String], default: [] },
-
-    // 🔐 CREATOR
-    creatorSecret: { type: String, index: true },
-
-    createdAt: { type: Date, default: Date.now },
-    expiresAt: Date
+    votedBy: {
+        type: [String],
+        default: []
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
 });
 
 const Poll = mongoose.model("Poll", PollSchema);
@@ -57,56 +57,53 @@ const Poll = mongoose.model("Poll", PollSchema);
 ======================= */
 app.post("/api/polls", async (req, res) => {
     try {
-        const { question, options, expiryMinutes } = req.body;
+        console.log("CREATE POLL BODY:", req.body);
+
+        const { question, options } = req.body;
 
         if (!question || !Array.isArray(options) || options.length < 2) {
             return res.status(400).json({ error: "Invalid poll data" });
         }
 
-        const creatorSecret = crypto.randomBytes(24).toString("hex");
-
         const poll = await Poll.create({
             question,
-            options: options.map(text => ({ text })),
-            creatorSecret,
-            expiresAt: Date.now() + (expiryMinutes || 10) * 60000
+            options: options.map(text => ({ text }))
         });
 
-        res.status(201).json({
-            pollId: poll._id,
-            creatorSecret
-        });
-    } catch {
+        res.status(201).json(poll);
+    } catch (err) {
+        console.error("CREATE POLL ERROR:", err);
         res.status(500).json({ error: "Create poll failed" });
     }
 });
 
 /* =======================
-   GET POLL (PUBLIC)
+   GET POLL
 ======================= */
 app.get("/api/polls/:id", async (req, res) => {
     try {
         const poll = await Poll.findById(req.params.id);
         if (!poll) return res.status(404).json({ error: "Poll not found" });
-
-        res.json({
-            _id: poll._id,
-            question: poll.question,
-            options: poll.options,
-            expiresAt: poll.expiresAt
-        });
+        res.json(poll);
     } catch {
-        res.status(500).json({ error: "Failed to load poll" });
+        res.status(500).json({ error: "Fetch poll failed" });
     }
 });
 
 /* =======================
-   VOTE (ANTI-REFRESH SAFE)
+   VOTE
 ======================= */
 app.post("/api/polls/:id/vote", async (req, res) => {
     try {
         const { selectedIndexes, browserId } = req.body;
-        if (!browserId) return res.status(400).json({ error: "Missing browser ID" });
+
+        if (!browserId) {
+            return res.status(400).json({ error: "Missing browser ID" });
+        }
+
+        if (!Array.isArray(selectedIndexes) || selectedIndexes.length === 0) {
+            return res.status(400).json({ error: "No options selected" });
+        }
 
         const poll = await Poll.findById(req.params.id);
         if (!poll) return res.status(404).json({ error: "Poll not found" });
@@ -116,7 +113,9 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         }
 
         selectedIndexes.forEach(i => {
-            if (poll.options[i]) poll.options[i].votes += 1;
+            if (poll.options[i]) {
+                poll.options[i].votes += 1;
+            }
         });
 
         poll.votedBy.push(browserId);
@@ -125,55 +124,6 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         res.json(poll);
     } catch {
         res.status(500).json({ error: "Vote failed" });
-    }
-});
-
-/* =======================
-   CREATOR: POLL HISTORY
-======================= */
-app.get("/api/creator/polls", async (req, res) => {
-    try {
-        const { secrets } = req.query;
-        if (!secrets) return res.json([]);
-
-        const secretList = secrets.split(",");
-
-        const polls = await Poll.find({ creatorSecret: { $in: secretList } })
-            .sort({ createdAt: -1 });
-
-        res.json(
-            polls.map(p => ({
-                _id: p._id,
-                question: p.question,
-                createdAt: p.createdAt,
-                expiresAt: p.expiresAt,
-                totalVotes: p.votedBy.length
-            }))
-        );
-    } catch {
-        res.status(500).json({ error: "Failed to load history" });
-    }
-});
-
-/* =======================
-   CREATOR: DELETE POLL
-======================= */
-app.delete("/api/polls/:id", async (req, res) => {
-    try {
-        const { admin } = req.query;
-        if (!admin) return res.status(403).json({ error: "Forbidden" });
-
-        const poll = await Poll.findOne({
-            _id: req.params.id,
-            creatorSecret: admin
-        });
-
-        if (!poll) return res.status(403).json({ error: "Forbidden" });
-
-        await poll.deleteOne();
-        res.json({ success: true });
-    } catch {
-        res.status(500).json({ error: "Delete failed" });
     }
 });
 

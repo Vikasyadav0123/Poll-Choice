@@ -1,5 +1,4 @@
 let isCreatingPoll = false;
-
 let pollData = null;
 let selectedIndexes = new Set();
 let hasVoted = false;
@@ -14,7 +13,6 @@ const optionsContainer = document.getElementById("optionsContainer");
    BROWSER ID (ANTI REFRESH)
 ======================= */
 const BROWSER_ID_KEY = "poll_browser_id";
-
 let browserId = localStorage.getItem(BROWSER_ID_KEY);
 if (!browserId) {
     browserId = crypto.randomUUID();
@@ -56,7 +54,6 @@ function createOption(value = "") {
 function normalizeOptions() {
     let rows = [...optionsContainer.children];
 
-    // remove empty middle rows
     for (let i = 0; i < rows.length - 1; i++) {
         const input = rows[i].querySelector("input");
         if (!input.value.trim()) rows[i].remove();
@@ -105,8 +102,9 @@ async function startPoll() {
             body: JSON.stringify({ question, options })
         });
 
-        pollData = await res.json();
+        if (!res.ok) throw new Error();
 
+        pollData = await res.json();
         renderVoteUI();
         startExpiryTimer();
     } catch {
@@ -167,21 +165,15 @@ function renderVoteUI() {
     btn.onclick = submitVote;
     output.appendChild(btn);
 
-    if (timerSpan) {
-        output.appendChild(timerSpan);
-    }
+    if (timerSpan) output.appendChild(timerSpan);
 }
 
 function toggleSelect(i, el) {
     if (hasVoted) return;
 
-    if (selectedIndexes.has(i)) {
-        selectedIndexes.delete(i);
-        el.classList.remove("selected");
-    } else {
-        selectedIndexes.add(i);
-        el.classList.add("selected");
-    }
+    selectedIndexes.has(i)
+        ? (selectedIndexes.delete(i), el.classList.remove("selected"))
+        : (selectedIndexes.add(i), el.classList.add("selected"));
 }
 
 /* =======================
@@ -200,10 +192,7 @@ async function submitVote() {
             })
         });
 
-        if (!res.ok) {
-            alert("Already voted");
-            return;
-        }
+        if (!res.ok) throw new Error();
 
         pollData = await res.json();
         hasVoted = true;

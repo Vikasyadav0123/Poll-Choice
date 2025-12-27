@@ -1,11 +1,10 @@
+/* =======================
+   GLOBAL STATE
+======================= */
 let isCreatingPoll = false;
-
 let pollData = null;
 let selectedIndexes = new Set();
 let hasVoted = false;
-
-let timerInterval = null;
-let timerSpan = null;
 
 const output = document.getElementById("output");
 const optionsContainer = document.getElementById("optionsContainer");
@@ -15,13 +14,35 @@ const optionsContainer = document.getElementById("optionsContainer");
 ======================= */
 const BROWSER_ID_KEY = "poll_browser_id";
 let browserId = localStorage.getItem(BROWSER_ID_KEY);
+
 if (!browserId) {
     browserId = crypto.randomUUID();
     localStorage.setItem(BROWSER_ID_KEY, browserId);
 }
 
 /* =======================
-   CREATE OPTION
+   CREATOR SECRETS STORAGE
+======================= */
+const CREATOR_SECRETS_KEY = "creator_poll_secrets";
+
+/*
+Stored as:
+[
+  { pollId, secret }
+]
+*/
+function getCreatorSecrets() {
+    return JSON.parse(localStorage.getItem(CREATOR_SECRETS_KEY) || "[]");
+}
+
+function saveCreatorSecret(pollId, secret) {
+    const list = getCreatorSecrets();
+    list.push({ pollId, secret });
+    localStorage.setItem(CREATOR_SECRETS_KEY, JSON.stringify(list));
+}
+
+/* =======================
+   OPTION INPUT CREATION
 ======================= */
 function createOption(value = "") {
     const wrapper = document.createElement("div");
@@ -50,10 +71,16 @@ function createOption(value = "") {
 }
 
 /* =======================
-   OPTIONS LOGIC
+   OPTIONS NORMALIZATION
 ======================= */
 function normalizeOptions() {
     let rows = [...optionsContainer.children];
+
+    // always keep at least 2
+    while (rows.length < 2) {
+        optionsContainer.appendChild(createOption());
+        rows = [...optionsContainer.children];
+    }
 
     for (let i = 0; i < rows.length - 1; i++) {
         const input = rows[i].querySelector("input");
@@ -66,8 +93,14 @@ function normalizeOptions() {
     rows.forEach(row => {
         const input = row.querySelector("input");
         const btn = row.querySelector(".delete-btn");
-        btn.style.opacity = input.value && row !== last ? "1" : "0";
-        btn.style.pointerEvents = input.value && row !== last ? "auto" : "none";
+
+        if (input.value.trim() && row !== last) {
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
+        } else {
+            btn.style.opacity = "0";
+            btn.style.pointerEvents = "none";
+        }
     });
 
     if (last.querySelector("input").value.trim()) {
@@ -76,7 +109,7 @@ function normalizeOptions() {
 }
 
 /* =======================
-   START POLL
+   CREATE POLL
 ======================= */
 async function startPoll() {
     if (isCreatingPoll) return;
@@ -88,195 +121,150 @@ async function startPoll() {
         .filter(Boolean);
 
     if (!question || options.length < 2) {
-        alert("Enter question & at least 2 options");
+        alert("Enter question and at least 2 options");
         isCreatingPoll = false;
         return;
     }
 
-    let minutes = Number(prompt("Poll expiry (minutes)?", "10")) || 10;
-    localStorage.setItem("pollExpiry", Date.now() + minutes * 60000);
+    const expiryMinutes =
+        Number(prompt("Poll expiry in minutes?", "10")) || 10;
 
-    const res = await fetch("/api/polls", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, options, browserId })
-    });
+    try {
+        const res = await fetch("/api/polls", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                question,
+                options,
+                expiryMinutes
+            })
+        });
 
-    const data = await res.json();
-    pollData = data.poll;
+        const data = await res.json();
+        if (!res.ok) throw new Error();
 
-    const shareLink = `${window.location.origin}${data.shareUrl}`;
-    renderShareBox(shareLink);
+        // store creator secret
+        saveCreatorSecret(data.pollId, data.creatorSecret);
 
-    renderVoteUI();
-    startExpiryTimer();
+        const adminLink = `${location.origin}/poll/${data.pollId}?admin=${data.creatorSecret}`;
+
+        alert(
+            "Poll created!\n\nAdmin link (save this):\n" +
+            adminLink
+        );
+
+        loadPollHistory();
+
+    } catch {
+        alert("Failed to create poll");
+    }
 
     isCreatingPoll = false;
 }
 
 /* =======================
-   SHARE UI
+   POLL HISTORY (CREATOR)
 ======================= */
-document.getElementById("copyBtn").onclick = () => {
-    const text = link;
+async function loadPollHistory() {
+    const list = getCreatorSecrets();
+    if (list.length === 0) return;
 
-    // create hidden textarea
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "absolute";
-    textarea.style.left = "-9999px";
+    const secrets = list.map(i => i.secret).join(",");
 
-    document.body.appendChild(textarea);
-
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-
-    let success = false;
     try {
-        success = document.execCommand("copy");
-    } catch (err) {
-        success = false;
+        const res = await fetch(`/api/creator/polls?secrets=${secrets}`);
+        const polls = await res.json();
+
+        renderPollHistory(polls, list);
+    } catch {
+        console.error("Failed to load history");
+    }
+}
+
+function renderPollHistory(polls, secretList) {
+    let history = document.getElementById("pollHistory");
+
+    if (!history) {
+        history = document.createElement("div");
+        history.id = "pollHistory";
+        history.style.marginTop = "24px";
+        document.querySelector(".card").appendChild(history);
     }
 
-    document.body.removeChild(textarea);
+    history.innerHTML = `
+        <h3>Your Poll History</h3>
+    `;
 
-    const btn = document.getElementById("copyBtn");
-    if (success) {
-        btn.textContent = "✔";
-        setTimeout(() => (btn.textContent = "📋"), 1200);
-    } else {
-        alert("Copy failed. Please long-press the link.");
-    }
-};
-
-
-
-// native share
-const nativeBtn = document.getElementById("nativeShareBtn");
-if (navigator.share) {
-    nativeBtn.onclick = () => {
-        navigator.share({
-            title: "Vote in this poll",
-            url: link
-        });
-    };
-} else {
-    nativeBtn.style.display = "none";
-}
-
-
-
-/* =======================
-   TIMER
-======================= */
-function startExpiryTimer() {
-    if (!timerSpan) {
-        timerSpan = document.createElement("span");
-        timerSpan.style.fontWeight = "600";
-        timerSpan.style.display = "inline-block";
-        timerSpan.style.marginBottom = "10px";
-        output.appendChild(timerSpan);
-    }
-
-    clearInterval(timerInterval);
-
-    timerInterval = setInterval(() => {
-        const diff = Math.ceil(
-            (Number(localStorage.getItem("pollExpiry")) - Date.now()) / 1000
-        );
-
-        if (diff <= 0) {
-            timerSpan.textContent = "⛔ Poll expired";
-            clearInterval(timerInterval);
-            showResults();
-            return;
-        }
-
-        timerSpan.textContent = `⏳ ${Math.floor(diff / 60)}m ${diff % 60}s`;
-    }, 1000);
-}
-
-/* =======================
-   VOTE UI
-======================= */
-function renderVoteUI() {
-    output.innerHTML += `<h3>${pollData.question}</h3>`;
-
-    pollData.options.forEach((opt, i) => {
-        const div = document.createElement("div");
-        div.className = "result-row";
-        div.textContent = opt.text;
-        div.onclick = () => toggleSelect(i, div);
-        output.appendChild(div);
-    });
-
-    const btn = document.createElement("button");
-    btn.textContent = "Submit Vote";
-    btn.onclick = submitVote;
-    output.appendChild(btn);
-}
-
-function toggleSelect(i, el) {
-    if (hasVoted) return;
-    selectedIndexes.has(i)
-        ? (selectedIndexes.delete(i), el.classList.remove("selected"))
-        : (selectedIndexes.add(i), el.classList.add("selected"));
-}
-
-/* =======================
-   SUBMIT VOTE
-======================= */
-async function submitVote() {
-    if (hasVoted) return;
-
-    const res = await fetch(`/api/polls/${pollData._id}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            selectedIndexes: [...selectedIndexes],
-            browserId
-        })
-    });
-
-    if (!res.ok) {
-        alert("Already voted");
+    if (polls.length === 0) {
+        history.innerHTML += `<p style="opacity:.6">No polls yet</p>`;
         return;
     }
 
-    pollData = await res.json();
-    hasVoted = true;
-    showResults();
-}
+    polls.forEach(poll => {
+        const secret = secretList.find(s => s.pollId === poll._id)?.secret;
 
-/* =======================
-   RESULTS
-======================= */
-function showResults() {
-    output.innerHTML = `<h3>Results</h3>`;
+        const row = document.createElement("div");
+        row.className = "result-box";
 
-    const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
-
-    pollData.options.forEach(o => {
-        const percent = Math.round((o.votes / total) * 100);
-
-        const box = document.createElement("div");
-        box.className = "result-box";
-
-        box.innerHTML = `
-            <div class="result-top">
-                <span>${o.text}</span>
-                <span>${percent}% (${o.votes})</span>
-            </div>
-            <div class="result-bar">
-                <div class="result-fill" style="width:${percent}%"></div>
-            </div>
+        row.innerHTML = `
+            <strong>${poll.question}</strong>
+            <p style="opacity:.6">
+                Votes: ${poll.totalVotes}<br>
+                Created: ${new Date(poll.createdAt).toLocaleString()}
+            </p>
         `;
 
-        output.appendChild(box);
+        const openBtn = document.createElement("button");
+        openBtn.className = "start-btn";
+        openBtn.textContent = "Open";
+        openBtn.onclick = () => {
+            window.open(
+                `/poll/${poll._id}?admin=${secret}`,
+                "_blank"
+            );
+        };
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "reset-btn";
+        delBtn.textContent = "Delete";
+        delBtn.style.marginLeft = "8px";
+
+        delBtn.onclick = async () => {
+            if (!confirm("Delete this poll permanently?")) return;
+
+            await fetch(
+                `/api/polls/${poll._id}?admin=${secret}`,
+                { method: "DELETE" }
+            );
+
+            // remove from local storage
+            const updated = getCreatorSecrets().filter(
+                p => p.pollId !== poll._id
+            );
+            localStorage.setItem(
+                CREATOR_SECRETS_KEY,
+                JSON.stringify(updated)
+            );
+
+            loadPollHistory();
+        };
+
+        row.appendChild(openBtn);
+        row.appendChild(delBtn);
+        history.appendChild(row);
     });
 }
 
+/* =======================
+   RESET UI
+======================= */
+function resetPoll() {
+    document.getElementById("questionInput").value = "";
+    output.innerHTML = "";
+    optionsContainer.innerHTML = "";
+    optionsContainer.appendChild(createOption());
+    optionsContainer.appendChild(createOption());
+}
 
 /* =======================
    INIT
@@ -284,4 +272,5 @@ function showResults() {
 document.addEventListener("DOMContentLoaded", () => {
     optionsContainer.appendChild(createOption());
     optionsContainer.appendChild(createOption());
+    loadPollHistory();
 });

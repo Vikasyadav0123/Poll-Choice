@@ -298,3 +298,16 @@ button.start-btn:disabled,
     background-color: #25d366 !important;
     color: #ffffff !important;
 }
+
+/* =======================
+   WINNER HIGHLIGHT
+======================= */
+.result-box.winner {
+    border-color: #25d366;
+    background: #eafff3;
+}
+
+.result-box.winner .result-top span:first-child {
+    color: #128c7e;
+    font-weight: 700;
+}

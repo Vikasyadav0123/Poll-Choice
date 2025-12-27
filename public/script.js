@@ -106,6 +106,7 @@ async function startPoll() {
 
         pollData = await res.json();
         renderVoteUI();
+        renderShareBox();
         startExpiryTimer();
     } catch {
         alert("Failed to create poll");
@@ -200,6 +201,44 @@ async function submitVote() {
     } catch {
         alert("Vote failed");
     }
+}
+
+/* =======================
+   SHARE BOX
+======================= */
+function renderShareBox() {
+    const pollUrl = `${window.location.origin}/poll/${pollData._id}`;
+
+    const box = document.createElement("div");
+    box.className = "share-box";
+
+    box.innerHTML = `
+        <div class="share-input-row">
+            <input type="text" value="${pollUrl}" readonly />
+            <button class="copy-btn">📋</button>
+        </div>
+        <div class="share-actions">
+            <a class="share-btn whatsapp" target="_blank"
+               href="https://wa.me/?text=${encodeURIComponent(pollUrl)}">
+               WhatsApp
+            </a>
+            <a class="share-btn telegram" target="_blank"
+               href="https://t.me/share/url?url=${encodeURIComponent(pollUrl)}">
+               Telegram
+            </a>
+        </div>
+    `;
+
+    const copyBtn = box.querySelector(".copy-btn");
+    const input = box.querySelector("input");
+
+    copyBtn.onclick = async () => {
+        await navigator.clipboard.writeText(pollUrl);
+        copyBtn.textContent = "✔";
+        setTimeout(() => (copyBtn.textContent = "📋"), 1000);
+    };
+
+    output.appendChild(box);
 }
 
 /* =======================

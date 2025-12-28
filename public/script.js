@@ -230,7 +230,6 @@ function renderShareBox() {
     `;
 
     const copyBtn = box.querySelector(".copy-btn");
-    const input = box.querySelector("input");
 
     copyBtn.onclick = async () => {
         await navigator.clipboard.writeText(pollUrl);
@@ -242,19 +241,40 @@ function renderShareBox() {
 }
 
 /* =======================
-   RESULTS
+   RESULTS (UI ONLY CHANGED)
 ======================= */
 function showResults() {
-    output.innerHTML = "<h3>Results</h3>";
+    output.innerHTML = "";
+
+    const container = document.createElement("div");
+    container.className = "results-container";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Results";
+    container.appendChild(heading);
 
     const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
 
     pollData.options.forEach(o => {
-        const p = Math.round((o.votes / total) * 100);
-        const line = document.createElement("p");
-        line.textContent = `${o.text}: ${p}% (${o.votes})`;
-        output.appendChild(line);
+        const percent = Math.round((o.votes / total) * 100);
+
+        const box = document.createElement("div");
+        box.className = "result-box";
+
+        box.innerHTML = `
+            <div class="result-top">
+                <span>${o.text}</span>
+                <span>${percent}% (${o.votes})</span>
+            </div>
+            <div class="result-bar">
+                <div class="result-fill" style="width:${percent}%"></div>
+            </div>
+        `;
+
+        container.appendChild(box);
     });
+
+    output.appendChild(container);
 }
 
 /* =======================

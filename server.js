@@ -17,6 +17,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
 app.get("/poll/:id", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "poll.html"));
 });
@@ -38,10 +39,7 @@ mongoose
 const PollSchema = new mongoose.Schema({
     question: String,
     options: [
-        {
-            text: String,
-            votes: { type: Number, default: 0 }
-        }
+        { text: String, votes: { type: Number, default: 0 } }
     ],
     votedBy: {
         type: [String],
@@ -50,7 +48,8 @@ const PollSchema = new mongoose.Schema({
     createdAt: {
         type: Date,
         default: Date.now
-    }
+    },
+    expiresAt: Date
 });
 
 const Poll = mongoose.model("Poll", PollSchema);
@@ -60,17 +59,20 @@ const Poll = mongoose.model("Poll", PollSchema);
 ======================= */
 app.post("/api/polls", async (req, res) => {
     try {
-        console.log("CREATE POLL BODY:", req.body);
-
-        const { question, options } = req.body;
+        const { question, options, durationMinutes } = req.body;
 
         if (!question || !Array.isArray(options) || options.length < 2) {
             return res.status(400).json({ error: "Invalid poll data" });
         }
 
+        const expiresAt = new Date(
+            Date.now() + (Number(durationMinutes) || 10) * 60000
+        );
+
         const poll = await Poll.create({
             question,
-            options: options.map(text => ({ text }))
+            options: options.map(text => ({ text })),
+            expiresAt
         });
 
         res.status(201).json(poll);
@@ -104,21 +106,19 @@ app.post("/api/polls/:id/vote", async (req, res) => {
             return res.status(400).json({ error: "Missing browser ID" });
         }
 
-        if (!Array.isArray(selectedIndexes) || selectedIndexes.length === 0) {
-            return res.status(400).json({ error: "No options selected" });
-        }
-
         const poll = await Poll.findById(req.params.id);
         if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+        if (new Date(poll.expiresAt) <= Date.now()) {
+            return res.status(403).json({ error: "Poll expired" });
+        }
 
         if (poll.votedBy.includes(browserId)) {
             return res.status(403).json({ error: "Already voted" });
         }
 
         selectedIndexes.forEach(i => {
-            if (poll.options[i]) {
-                poll.options[i].votes += 1;
-            }
+            if (poll.options[i]) poll.options[i].votes += 1;
         });
 
         poll.votedBy.push(browserId);

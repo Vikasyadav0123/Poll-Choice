@@ -1,20 +1,16 @@
 console.log("poll.js loaded");
 
-/* =======================
-   GLOBAL STATE
-======================= */
 let pollData = null;
 let selectedIndexes = new Set();
 let hasVoted = false;
 
 let timerInterval = null;
-let refreshInterval = null;
 let timerSpan = null;
 
 const output = document.getElementById("output");
 
 /* =======================
-   STRONG BROWSER ID
+   BROWSER ID
 ======================= */
 const BROWSER_ID_KEY = "poll_browser_id";
 let browserId = localStorage.getItem(BROWSER_ID_KEY);
@@ -25,104 +21,59 @@ if (!browserId) {
 }
 
 /* =======================
-   POLL ID + ADMIN CHECK
+   GET POLL ID
 ======================= */
 const match = window.location.pathname.match(/^\/poll\/([a-f0-9]{24})$/);
 if (!match) {
     output.innerHTML = "Invalid poll link";
     throw new Error("Invalid poll URL");
 }
-
 const pollId = match[1];
-const urlParams = new URLSearchParams(window.location.search);
-const adminSecret = urlParams.get("admin");
-const isAdmin = Boolean(adminSecret);
-
-const VOTE_LOCK_KEY = `voted_poll_${pollId}`;
 
 /* =======================
    LOAD POLL
 ======================= */
-async function loadPoll(initial = false) {
+async function loadPoll() {
     try {
         const res = await fetch(`/api/polls/${pollId}`);
-        if (!res.ok) throw new Error("Poll not found");
+        if (!res.ok) throw new Error("Failed");
 
         pollData = await res.json();
 
         renderTimer();
         startExpiryTimer();
+        renderVoting();
 
-        // frontend anti-refresh lock
-        if (localStorage.getItem(VOTE_LOCK_KEY)) {
-            hasVoted = true;
-        }
-
-        if (shouldShowResults()) {
+        if (isPollExpired()) {
             showResults();
-        } else {
-            renderVoting();
         }
-
-        if (initial && isAdmin) {
-            startLiveRefresh();
-        }
-
     } catch {
-        output.innerHTML = "Poll not found or deleted";
+        output.innerHTML = "Failed to load poll";
     }
-}
-
-/* =======================
-   RESULT VISIBILITY RULE
-======================= */
-function shouldShowResults() {
-    if (isAdmin) return true;
-    if (isPollExpired()) return true;
-    if (hasVoted) return true;
-    return false;
-}
-
-/* =======================
-   LIVE REFRESH (ADMIN)
-======================= */
-function startLiveRefresh() {
-    clearInterval(refreshInterval);
-
-    refreshInterval = setInterval(async () => {
-        try {
-            const res = await fetch(`/api/polls/${pollId}`);
-            if (!res.ok) return;
-
-            pollData = await res.json();
-            showResults();
-        } catch { }
-    }, 3000);
 }
 
 /* =======================
    TIMER
 ======================= */
+function renderTimer() {
+    if (timerSpan) return;
+    timerSpan = document.createElement("div");
+    timerSpan.style.marginBottom = "10px";
+    timerSpan.style.fontWeight = "600";
+    output.before(timerSpan);
+}
+
 function isPollExpired() {
-    return Date.now() > new Date(pollData.expiresAt).getTime();
+    return new Date(pollData.expiresAt) <= Date.now();
 }
 
 function getRemainingTime() {
-    const diff = new Date(pollData.expiresAt).getTime() - Date.now();
+    const diff = new Date(pollData.expiresAt) - Date.now();
     if (diff <= 0) return "Expired";
 
     const m = Math.floor(diff / 60000);
     const s = Math.floor((diff % 60000) / 1000);
     return `${m}m ${s}s`;
-}
-
-function renderTimer() {
-    if (timerSpan) return;
-
-    timerSpan = document.createElement("div");
-    timerSpan.style.fontWeight = "600";
-    timerSpan.style.marginBottom = "10px";
-    output.before(timerSpan);
 }
 
 function startExpiryTimer() {
@@ -151,24 +102,18 @@ function renderVoting() {
     pollData.options.forEach((opt, index) => {
         const row = document.createElement("div");
         row.className = "result-row";
-        row.innerHTML = `
-            <span>${opt.text}</span>
-            <span class="check">✓</span>
-        `;
+        row.innerHTML = `<span>${opt.text}</span>`;
         row.onclick = () => toggleSelect(index, row);
         output.appendChild(row);
     });
-
-    const submitBox = document.createElement("div");
-    submitBox.className = "submit-box";
 
     const btn = document.createElement("button");
     btn.className = "start-btn";
     btn.textContent = "Submit Vote";
     btn.onclick = submitVote;
 
-    submitBox.appendChild(btn);
-    output.appendChild(submitBox);
+    if (isPollExpired()) btn.disabled = true;
+    output.appendChild(btn);
 }
 
 function toggleSelect(index, row) {
@@ -188,11 +133,7 @@ function toggleSelect(index, row) {
 ======================= */
 async function submitVote() {
     if (hasVoted || isPollExpired()) return;
-
-    if (selectedIndexes.size === 0) {
-        alert("Select at least one option");
-        return;
-    }
+    if (selectedIndexes.size === 0) return alert("Select at least one option");
 
     try {
         const res = await fetch(`/api/polls/${pollId}/vote`, {
@@ -205,72 +146,33 @@ async function submitVote() {
         });
 
         if (!res.ok) {
-            alert("You already voted");
-            hasVoted = true;
-            localStorage.setItem(VOTE_LOCK_KEY, "true");
-            showResults();
+            alert("Already voted or poll expired");
             return;
         }
 
         pollData = await res.json();
         hasVoted = true;
-        localStorage.setItem(VOTE_LOCK_KEY, "true");
         showResults();
-
     } catch {
         alert("Server error");
     }
 }
 
 /* =======================
-   RESULTS (ADMIN + USER)
+   RESULTS
 ======================= */
 function showResults() {
-    output.innerHTML = `<h3>${pollData.question}</h3>`;
+    output.innerHTML = "<h3>Results</h3>";
 
-    const totalVotes = pollData.options.reduce((s, o) => s + o.votes, 0);
-    const maxVotes = Math.max(...pollData.options.map(o => o.votes));
-
-    const totalBox = document.createElement("div");
-    totalBox.className = "results-container";
-    totalBox.innerHTML = `<strong>Total voters: ${totalVotes}</strong>`;
-    output.appendChild(totalBox);
+    const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
 
     pollData.options.forEach(opt => {
-        const percent = totalVotes
-            ? Math.round((opt.votes / totalVotes) * 100)
-            : 0;
-
-        const isWinner = opt.votes === maxVotes && maxVotes > 0;
-
-        const box = document.createElement("div");
-        box.className = `result-box ${isWinner ? "winner" : ""}`;
-
-        box.innerHTML = `
-            <div class="result-top">
-                <span>${isWinner ? "🏆 " : ""}${opt.text}</span>
-                <span>${percent}% (${opt.votes})</span>
-            </div>
-            <div class="result-bar">
-                <div class="result-fill" style="width:${percent}%"></div>
-            </div>
-        `;
-
-        output.appendChild(box);
+        const percent = Math.round((opt.votes / total) * 100);
+        output.innerHTML += `<p>${opt.text}: ${percent}% (${opt.votes})</p>`;
     });
-
-    if (isAdmin) {
-        const adminNote = document.createElement("p");
-        adminNote.style.opacity = ".6";
-        adminNote.style.marginTop = "10px";
-        adminNote.textContent = "Admin view: live results enabled";
-        output.appendChild(adminNote);
-    }
 }
 
 /* =======================
    INIT
 ======================= */
-document.addEventListener("DOMContentLoaded", () => {
-    loadPoll(true);
-});
+document.addEventListener("DOMContentLoaded", loadPoll);

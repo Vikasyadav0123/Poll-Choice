@@ -5,32 +5,24 @@ let selectedIndexes = new Set();
 let hasVoted = false;
 
 let timerInterval = null;
+let timerSpan = null;
 
 const output = document.getElementById("output");
 
 /* =======================
-   BROWSER ID
-======================= */
-const BROWSER_ID_KEY = "poll_browser_id";
-let browserId = localStorage.getItem(BROWSER_ID_KEY);
-
-if (!browserId) {
-    browserId = crypto.randomUUID();
-    localStorage.setItem(BROWSER_ID_KEY, browserId);
-}
-
-/* =======================
-   GET POLL ID
+   EXTRACT POLL ID
 ======================= */
 const match = window.location.pathname.match(/^\/poll\/([a-f0-9]{24})$/);
 if (!match) {
     output.innerHTML = "Invalid poll link";
     throw new Error("Invalid poll URL");
 }
+
 const pollId = match[1];
+const voteLockKey = `voted_poll_${pollId}`;
 
 /* =======================
-   LOAD POLL
+   LOAD POLL (ALWAYS FRESH)
 ======================= */
 async function loadPoll() {
     try {
@@ -39,55 +31,55 @@ async function loadPoll() {
 
         pollData = await res.json();
 
+        if (localStorage.getItem(voteLockKey)) {
+            hasVoted = true;
+        }
+
         renderTimer();
         startExpiryTimer();
-        renderVoting();
 
-        if (isPollExpired()) showResults();
+        if (isPollExpired() || hasVoted) {
+            await refreshResults();   // ✅ FIX
+        } else {
+            renderVoting();
+        }
+
     } catch {
         output.innerHTML = "Failed to load poll";
     }
 }
 
 /* =======================
-   TIMER
+   TIMER (DB BASED)
 ======================= */
 function isPollExpired() {
-    return new Date(pollData.expiresAt) <= Date.now();
-}
-
-function getRemainingTime() {
-    const diff = new Date(pollData.expiresAt) - Date.now();
-    if (diff <= 0) return "Expired";
-
-    const m = Math.floor(diff / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    return `${m}m ${s}s`;
+    return Date.now() >= new Date(pollData.expiresAt).getTime();
 }
 
 function renderTimer() {
-    const timerBox = document.createElement("div");
-    timerBox.className = "timer-box";
-    timerBox.id = "timerBox";
-    timerBox.textContent = `⏳ Time left: ${getRemainingTime()}`;
-    output.before(timerBox);
+    if (timerSpan) return;
+
+    timerSpan = document.createElement("div");
+    timerSpan.className = "timer-box";
+    output.before(timerSpan);
 }
 
 function startExpiryTimer() {
     clearInterval(timerInterval);
 
-    timerInterval = setInterval(() => {
-        const box = document.getElementById("timerBox");
-        if (!box) return;
+    timerInterval = setInterval(async () => {
+        const diff = Math.ceil(
+            (new Date(pollData.expiresAt).getTime() - Date.now()) / 1000
+        );
 
-        if (isPollExpired()) {
-            box.textContent = "⛔ Poll expired";
+        if (diff <= 0) {
+            timerSpan.textContent = "⛔ Poll expired";
             clearInterval(timerInterval);
-            showResults();
+            await refreshResults();   // ✅ FIX
             return;
         }
 
-        box.textContent = `⏳ Time left: ${getRemainingTime()}`;
+        timerSpan.textContent = `⏳ Time left: ${Math.floor(diff / 60)}m ${diff % 60}s`;
     }, 1000);
 }
 
@@ -113,50 +105,52 @@ function renderVoting() {
     btn.textContent = "Submit Vote";
     btn.onclick = submitVote;
 
-    if (isPollExpired()) btn.disabled = true;
     output.appendChild(btn);
 }
 
 function toggleSelect(index, row) {
     if (hasVoted || isPollExpired()) return;
 
-    if (selectedIndexes.has(index)) {
-        selectedIndexes.delete(index);
-        row.classList.remove("selected");
-    } else {
-        selectedIndexes.add(index);
-        row.classList.add("selected");
-    }
+    selectedIndexes.has(index)
+        ? (selectedIndexes.delete(index), row.classList.remove("selected"))
+        : (selectedIndexes.add(index), row.classList.add("selected"));
 }
 
 /* =======================
    SUBMIT VOTE
 ======================= */
 async function submitVote() {
-    if (hasVoted || isPollExpired()) return;
-    if (selectedIndexes.size === 0) return alert("Select at least one option");
+    if (hasVoted || selectedIndexes.size === 0) return;
 
-    try {
-        const res = await fetch(`/api/polls/${pollId}/vote`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                selectedIndexes: [...selectedIndexes],
-                browserId
-            })
-        });
+    const res = await fetch(`/api/polls/${pollId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            selectedIndexes: [...selectedIndexes],
+            browserId: localStorage.getItem("poll_browser_id")
+        })
+    });
 
-        if (!res.ok) {
-            alert("Already voted or poll expired");
-            return;
-        }
-
-        pollData = await res.json();
-        hasVoted = true;
-        showResults();
-    } catch {
-        alert("Server error");
+    if (!res.ok) {
+        alert("Already voted or poll expired");
+        return;
     }
+
+    localStorage.setItem(voteLockKey, "true");
+    hasVoted = true;
+
+    await refreshResults();   // ✅ FIX
+}
+
+/* =======================
+   REFRESH RESULTS (THE FIX)
+======================= */
+async function refreshResults() {
+    const res = await fetch(`/api/polls/${pollId}`);
+    if (!res.ok) return;
+
+    pollData = await res.json();
+    showResults();
 }
 
 /* =======================
@@ -165,9 +159,12 @@ async function submitVote() {
 function showResults() {
     output.innerHTML = "";
 
-    const wrap = document.createElement("div");
-    wrap.className = "results-container";
-    wrap.innerHTML = "<h3>Results</h3>";
+    const container = document.createElement("div");
+    container.className = "results-container";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Results";
+    container.appendChild(heading);
 
     const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
 
@@ -176,6 +173,7 @@ function showResults() {
 
         const box = document.createElement("div");
         box.className = "result-box";
+
         box.innerHTML = `
             <div class="result-top">
                 <span>${opt.text}</span>
@@ -186,10 +184,10 @@ function showResults() {
             </div>
         `;
 
-        wrap.appendChild(box);
+        container.appendChild(box);
     });
 
-    output.appendChild(wrap);
+    output.appendChild(container);
 }
 
 /* =======================

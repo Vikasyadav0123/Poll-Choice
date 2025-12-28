@@ -1,21 +1,26 @@
 let isCreatingPoll = false;
+let pollData = null;
+let selectedIndexes = new Set();
+let hasVoted = false;
+
+let timerInterval = null;
+let timerSpan = null;
 
 const output = document.getElementById("output");
 const optionsContainer = document.getElementById("optionsContainer");
 
 /* =======================
-   BROWSER ID
+   BROWSER ID (ANTI REFRESH)
 ======================= */
 const BROWSER_ID_KEY = "poll_browser_id";
 let browserId = localStorage.getItem(BROWSER_ID_KEY);
-
 if (!browserId) {
     browserId = crypto.randomUUID();
     localStorage.setItem(BROWSER_ID_KEY, browserId);
 }
 
 /* =======================
-   CREATE OPTION
+   CREATE OPTION INPUT
 ======================= */
 function createOption(value = "") {
     const wrapper = document.createElement("div");
@@ -28,6 +33,9 @@ function createOption(value = "") {
     const delBtn = document.createElement("span");
     delBtn.textContent = "✖";
     delBtn.className = "delete-btn";
+    delBtn.style.opacity = "0";
+    delBtn.style.pointerEvents = "none";
+
     delBtn.onclick = () => {
         wrapper.remove();
         normalizeOptions();
@@ -41,7 +49,7 @@ function createOption(value = "") {
 }
 
 /* =======================
-   OPTIONS LOGIC
+   OPTIONS NORMALIZER
 ======================= */
 function normalizeOptions() {
     let rows = [...optionsContainer.children];
@@ -57,10 +65,11 @@ function normalizeOptions() {
     rows.forEach(row => {
         const input = row.querySelector("input");
         const btn = row.querySelector(".delete-btn");
-        btn.style.display = input.value && row !== last ? "block" : "none";
+        btn.style.opacity = input.value && row !== last ? "1" : "0";
+        btn.style.pointerEvents = input.value && row !== last ? "auto" : "none";
     });
 
-    if (last.querySelector("input").value.trim()) {
+    if (last && last.querySelector("input").value.trim()) {
         optionsContainer.appendChild(createOption());
     }
 }
@@ -73,49 +82,179 @@ async function startPoll() {
     isCreatingPoll = true;
 
     const question = document.getElementById("questionInput").value.trim();
-    const options = [...document.querySelectorAll("#optionsContainer input")]
+    const options = [...optionsContainer.querySelectorAll("input")]
         .map(i => i.value.trim())
         .filter(Boolean);
 
     if (!question || options.length < 2) {
-        alert("Enter question & at least 2 options");
+        alert("Enter question and at least 2 options");
         isCreatingPoll = false;
         return;
     }
 
-    let minutes = prompt("Poll expiry (minutes)?", "10");
-    minutes = Number(minutes);
-
-    if (!minutes || minutes <= 0) {
-        minutes = 10;
-    }
+    const minutes = Number(prompt("Poll expiry (minutes)?", "10")) || 10;
+    localStorage.setItem("pollExpiry", Date.now() + minutes * 60000);
 
     try {
         const res = await fetch("/api/polls", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                question,
-                options,
-                durationMinutes: minutes
-            })
+            body: JSON.stringify({ question, options })
         });
 
-        if (!res.ok) {
-            alert("Failed to create poll");
-            isCreatingPoll = false;
-            return;
-        }
+        if (!res.ok) throw new Error();
 
-        const poll = await res.json();
-
-        // Redirect to poll page
-        window.location.href = `/poll/${poll._id}`;
-    } catch (err) {
-        alert("Server error");
+        pollData = await res.json();
+        renderVoteUI();
+        renderShareBox();
+        startExpiryTimer();
+    } catch {
+        alert("Failed to create poll");
     }
 
     isCreatingPoll = false;
+}
+
+/* =======================
+   TIMER
+======================= */
+function startExpiryTimer() {
+    if (!timerSpan) {
+        timerSpan = document.createElement("div");
+        timerSpan.style.fontWeight = "600";
+        timerSpan.style.marginTop = "10px";
+    }
+
+    clearInterval(timerInterval);
+
+    timerInterval = setInterval(() => {
+        const expiry = Number(localStorage.getItem("pollExpiry"));
+        const diff = Math.ceil((expiry - Date.now()) / 1000);
+
+        if (diff <= 0) {
+            timerSpan.textContent = "⛔ Poll expired";
+            clearInterval(timerInterval);
+            showResults();
+            return;
+        }
+
+        timerSpan.textContent = `⏳ ${Math.floor(diff / 60)}m ${diff % 60}s`;
+    }, 1000);
+}
+
+/* =======================
+   VOTING UI
+======================= */
+function renderVoteUI() {
+    output.innerHTML = "";
+
+    const title = document.createElement("h3");
+    title.textContent = pollData.question;
+    output.appendChild(title);
+
+    pollData.options.forEach((opt, i) => {
+        const row = document.createElement("div");
+        row.className = "result-row";
+        row.textContent = opt.text;
+        row.onclick = () => toggleSelect(i, row);
+        output.appendChild(row);
+    });
+
+    const btn = document.createElement("button");
+    btn.className = "start-btn";
+    btn.textContent = "Submit Vote";
+    btn.onclick = submitVote;
+    output.appendChild(btn);
+
+    if (timerSpan) output.appendChild(timerSpan);
+}
+
+function toggleSelect(i, el) {
+    if (hasVoted) return;
+
+    selectedIndexes.has(i)
+        ? (selectedIndexes.delete(i), el.classList.remove("selected"))
+        : (selectedIndexes.add(i), el.classList.add("selected"));
+}
+
+/* =======================
+   SUBMIT VOTE
+======================= */
+async function submitVote() {
+    if (hasVoted || selectedIndexes.size === 0) return;
+
+    try {
+        const res = await fetch(`/api/polls/${pollData._id}/vote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                selectedIndexes: [...selectedIndexes],
+                browserId
+            })
+        });
+
+        if (!res.ok) throw new Error();
+
+        pollData = await res.json();
+        hasVoted = true;
+        showResults();
+    } catch {
+        alert("Vote failed");
+    }
+}
+
+/* =======================
+   SHARE BOX
+======================= */
+function renderShareBox() {
+    const pollUrl = `${window.location.origin}/poll/${pollData._id}`;
+
+    const box = document.createElement("div");
+    box.className = "share-box";
+
+    box.innerHTML = `
+        <div class="share-input-row">
+            <input type="text" value="${pollUrl}" readonly />
+            <button class="copy-btn">📋</button>
+        </div>
+        <div class="share-actions">
+            <a class="share-btn whatsapp" target="_blank"
+               href="https://wa.me/?text=${encodeURIComponent(pollUrl)}">
+               WhatsApp
+            </a>
+            <a class="share-btn telegram" target="_blank"
+               href="https://t.me/share/url?url=${encodeURIComponent(pollUrl)}">
+               Telegram
+            </a>
+        </div>
+    `;
+
+    const copyBtn = box.querySelector(".copy-btn");
+    const input = box.querySelector("input");
+
+    copyBtn.onclick = async () => {
+        await navigator.clipboard.writeText(pollUrl);
+        copyBtn.textContent = "✔";
+        setTimeout(() => (copyBtn.textContent = "📋"), 1000);
+    };
+
+    output.appendChild(box);
+}
+
+/* =======================
+   RESULTS
+======================= */
+function showResults() {
+    output.innerHTML = "<h3>Results</h3>";
+
+    const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
+
+    pollData.options.forEach(o => {
+        const p = Math.round((o.votes / total) * 100);
+        const line = document.createElement("p");
+        line.textContent = `${o.text}: ${p}% (${o.votes})`;
+        output.appendChild(line);
+    });
 }
 
 /* =======================
@@ -124,10 +263,19 @@ async function startPoll() {
 function resetPoll() {
     if (!confirm("Reset poll?")) return;
 
+    clearInterval(timerInterval);
+    timerInterval = null;
+    timerSpan = null;
+
+    pollData = null;
+    hasVoted = false;
+    selectedIndexes.clear();
+    localStorage.removeItem("pollExpiry");
+
     output.innerHTML = "";
     document.getElementById("questionInput").value = "";
-    optionsContainer.innerHTML = "";
 
+    optionsContainer.innerHTML = "";
     optionsContainer.appendChild(createOption());
     optionsContainer.appendChild(createOption());
 }

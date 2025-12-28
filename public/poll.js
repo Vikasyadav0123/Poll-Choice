@@ -5,7 +5,6 @@ let selectedIndexes = new Set();
 let hasVoted = false;
 
 let timerInterval = null;
-let timerSpan = null;
 
 const output = document.getElementById("output");
 
@@ -36,7 +35,7 @@ const pollId = match[1];
 async function loadPoll() {
     try {
         const res = await fetch(`/api/polls/${pollId}`);
-        if (!res.ok) throw new Error("Failed");
+        if (!res.ok) throw new Error();
 
         pollData = await res.json();
 
@@ -44,9 +43,7 @@ async function loadPoll() {
         startExpiryTimer();
         renderVoting();
 
-        if (isPollExpired()) {
-            showResults();
-        }
+        if (isPollExpired()) showResults();
     } catch {
         output.innerHTML = "Failed to load poll";
     }
@@ -55,14 +52,6 @@ async function loadPoll() {
 /* =======================
    TIMER
 ======================= */
-function renderTimer() {
-    if (timerSpan) return;
-    timerSpan = document.createElement("div");
-    timerSpan.style.marginBottom = "10px";
-    timerSpan.style.fontWeight = "600";
-    output.before(timerSpan);
-}
-
 function isPollExpired() {
     return new Date(pollData.expiresAt) <= Date.now();
 }
@@ -76,17 +65,29 @@ function getRemainingTime() {
     return `${m}m ${s}s`;
 }
 
+function renderTimer() {
+    const timerBox = document.createElement("div");
+    timerBox.className = "timer-box";
+    timerBox.id = "timerBox";
+    timerBox.textContent = `⏳ Time left: ${getRemainingTime()}`;
+    output.before(timerBox);
+}
+
 function startExpiryTimer() {
     clearInterval(timerInterval);
 
     timerInterval = setInterval(() => {
+        const box = document.getElementById("timerBox");
+        if (!box) return;
+
         if (isPollExpired()) {
-            timerSpan.textContent = "⛔ Poll expired";
+            box.textContent = "⛔ Poll expired";
             clearInterval(timerInterval);
             showResults();
             return;
         }
-        timerSpan.textContent = `⏳ Time left: ${getRemainingTime()}`;
+
+        box.textContent = `⏳ Time left: ${getRemainingTime()}`;
     }, 1000);
 }
 
@@ -102,7 +103,7 @@ function renderVoting() {
     pollData.options.forEach((opt, index) => {
         const row = document.createElement("div");
         row.className = "result-row";
-        row.innerHTML = `<span>${opt.text}</span>`;
+        row.textContent = opt.text;
         row.onclick = () => toggleSelect(index, row);
         output.appendChild(row);
     });
@@ -162,14 +163,33 @@ async function submitVote() {
    RESULTS
 ======================= */
 function showResults() {
-    output.innerHTML = "<h3>Results</h3>";
+    output.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "results-container";
+    wrap.innerHTML = "<h3>Results</h3>";
 
     const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
 
     pollData.options.forEach(opt => {
         const percent = Math.round((opt.votes / total) * 100);
-        output.innerHTML += `<p>${opt.text}: ${percent}% (${opt.votes})</p>`;
+
+        const box = document.createElement("div");
+        box.className = "result-box";
+        box.innerHTML = `
+            <div class="result-top">
+                <span>${opt.text}</span>
+                <span>${percent}% (${opt.votes})</span>
+            </div>
+            <div class="result-bar">
+                <div class="result-fill" style="width:${percent}%"></div>
+            </div>
+        `;
+
+        wrap.appendChild(box);
     });
+
+    output.appendChild(wrap);
 }
 
 /* =======================

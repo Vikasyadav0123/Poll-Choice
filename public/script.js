@@ -93,16 +93,12 @@ async function startPoll() {
     }
 
     const minutes = Number(prompt("Poll expiry (minutes)?", "10")) || 10;
-
-    // 🔽 ADDED: still keep localStorage (your logic)
     localStorage.setItem("pollExpiry", Date.now() + minutes * 60000);
 
     try {
         const res = await fetch("/api/polls", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-
-            // 🔽 ADDED: send duration to server
             body: JSON.stringify({
                 question,
                 options,
@@ -116,6 +112,11 @@ async function startPoll() {
         renderVoteUI();
         renderShareBox();
         startExpiryTimer();
+
+        // ✅ ADDITION (ONLY THIS LINE)
+        // Open poll page so creator can see live & final results
+        window.open(`/poll/${pollData._id}`, "_blank");
+
     } catch {
         alert("Failed to create poll");
     }
@@ -124,7 +125,7 @@ async function startPoll() {
 }
 
 /* =======================
-   TIMER (DB + FALLBACK)
+   TIMER
 ======================= */
 function startExpiryTimer() {
     if (!timerSpan) {
@@ -136,8 +137,6 @@ function startExpiryTimer() {
     clearInterval(timerInterval);
 
     timerInterval = setInterval(() => {
-
-        // 🔽 ADDED: prefer DB expiry
         let expiry = pollData?.expiresAt
             ? new Date(pollData.expiresAt).getTime()
             : Number(localStorage.getItem("pollExpiry"));

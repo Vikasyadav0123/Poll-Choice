@@ -6,6 +6,9 @@ let hasVoted = false;
 let timerInterval = null;
 let timerSpan = null;
 
+/* ✅ ADDITION */
+let pollExpired = false;
+
 const output = document.getElementById("output");
 const optionsContainer = document.getElementById("optionsContainer");
 
@@ -81,6 +84,8 @@ async function startPoll() {
     if (isCreatingPoll) return;
     isCreatingPoll = true;
 
+    pollExpired = false; // ✅ reset flag
+
     const question = document.getElementById("questionInput").value.trim();
     const options = [...optionsContainer.querySelectorAll("input")]
         .map(i => i.value.trim())
@@ -113,8 +118,6 @@ async function startPoll() {
         renderShareBox();
         startExpiryTimer();
 
-        // ✅ ADDITION (ONLY THIS LINE)
-        // Open poll page so creator can see live & final results
         window.open(`/poll/${pollData._id}`, "_blank");
 
     } catch {
@@ -144,9 +147,10 @@ function startExpiryTimer() {
         const diff = Math.ceil((expiry - Date.now()) / 1000);
 
         if (diff <= 0) {
+            pollExpired = true; // ✅ mark expired
             timerSpan.textContent = "⛔ Poll expired";
             clearInterval(timerInterval);
-            showResults();
+            showResults(); // ✅ results ONLY now
             return;
         }
 
@@ -178,7 +182,7 @@ function renderVoteUI() {
     btn.onclick = submitVote;
     output.appendChild(btn);
 
-    if (timerSpan) output.appendChild(timerSpan);
+    output.appendChild(timerSpan);
 }
 
 function toggleSelect(i, el) {
@@ -209,7 +213,10 @@ async function submitVote() {
 
         pollData = await res.json();
         hasVoted = true;
-        showResults();
+
+        // ❌ DO NOT show results on home page
+        if (pollExpired) showResults();
+
     } catch {
         alert("Vote failed");
     }
@@ -256,6 +263,8 @@ function renderShareBox() {
    RESULTS
 ======================= */
 function showResults() {
+    if (!pollExpired) return; // ✅ BLOCK empty results
+
     output.innerHTML = "";
 
     const container = document.createElement("div");
@@ -298,6 +307,8 @@ function resetPoll() {
     clearInterval(timerInterval);
     timerInterval = null;
     timerSpan = null;
+
+    pollExpired = false;
 
     pollData = null;
     hasVoted = false;

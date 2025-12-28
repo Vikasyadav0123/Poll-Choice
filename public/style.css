@@ -177,3 +177,50 @@ button:disabled {
 #output {
     margin-top: 12px;
 }
+
+/* =======================
+   SHARE BOX (ADD THIS)
+======================= */
+.share-box {
+    margin-top: 14px;
+}
+
+.share-input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.share-input-row input {
+    flex: 1;
+}
+
+.copy-btn {
+    border-radius: 10px;
+    padding: 0 14px;
+    font-size: 16px;
+    cursor: pointer;
+    background: #e9ecef;
+}
+
+.share-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.share-btn {
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 14px;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.share-btn.whatsapp {
+    background: #25d366;
+}
+
+.share-btn.telegram {
+    background: #229ed9;
+}

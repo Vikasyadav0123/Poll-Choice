@@ -39,10 +39,7 @@ mongoose
 const PollSchema = new mongoose.Schema({
     question: String,
     options: [
-        {
-            text: String,
-            votes: { type: Number, default: 0 }
-        }
+        { text: String, votes: { type: Number, default: 0 } }
     ],
     votedBy: {
         type: [String],
@@ -72,12 +69,11 @@ app.post("/api/polls", async (req, res) => {
         }
 
         const minutes = Number(durationMinutes) || 10;
-        const expiresAt = new Date(Date.now() + minutes * 60000);
 
         const poll = await Poll.create({
             question,
             options: options.map(text => ({ text })),
-            expiresAt
+            expiresAt: new Date(Date.now() + minutes * 60000)
         });
 
         res.status(201).json(poll);
@@ -111,15 +107,10 @@ app.post("/api/polls/:id/vote", async (req, res) => {
             return res.status(400).json({ error: "Missing browser ID" });
         }
 
-        if (!Array.isArray(selectedIndexes) || selectedIndexes.length === 0) {
-            return res.status(400).json({ error: "No options selected" });
-        }
-
         const poll = await Poll.findById(req.params.id);
         if (!poll) return res.status(404).json({ error: "Poll not found" });
 
-        // ✅ FIXED EXPIRY CHECK
-        if (new Date(poll.expiresAt).getTime() <= Date.now()) {
+        if (Date.now() > new Date(poll.expiresAt).getTime()) {
             return res.status(403).json({ error: "Poll expired" });
         }
 
@@ -128,16 +119,15 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         }
 
         selectedIndexes.forEach(i => {
-            if (poll.options[i]) {
-                poll.options[i].votes += 1;
-            }
+            if (poll.options[i]) poll.options[i].votes += 1;
         });
 
         poll.votedBy.push(browserId);
         await poll.save();
 
         res.json(poll);
-    } catch {
+    } catch (err) {
+        console.error("VOTE ERROR:", err);
         res.status(500).json({ error: "Vote failed" });
     }
 });

@@ -29,7 +29,7 @@ mongoose
     .connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB connected"))
     .catch(err => {
-        console.error("❌ MongoDB error:", err);
+        console.error("❌ MongoDB error:", err.message);
         process.exit(1);
     });
 
@@ -39,7 +39,10 @@ mongoose
 const PollSchema = new mongoose.Schema({
     question: String,
     options: [
-        { text: String, votes: { type: Number, default: 0 } }
+        {
+            text: String,
+            votes: { type: Number, default: 0 }
+        }
     ],
     votedBy: {
         type: [String],
@@ -62,23 +65,32 @@ const Poll = mongoose.model("Poll", PollSchema);
 ======================= */
 app.post("/api/polls", async (req, res) => {
     try {
+        console.log("📩 CREATE POLL BODY:", req.body);
+
         const { question, options, durationMinutes } = req.body;
 
-        if (!question || !Array.isArray(options) || options.length < 2) {
+        // ✅ STRONG VALIDATION (FIXES FAILED CREATE)
+        if (
+            !question ||
+            !Array.isArray(options) ||
+            options.length < 2 ||
+            options.some(o => typeof o !== "string" || !o.trim())
+        ) {
             return res.status(400).json({ error: "Invalid poll data" });
         }
 
-        const minutes = Number(durationMinutes) || 10;
+        const minutes = Number(durationMinutes);
+        const safeMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 10;
 
         const poll = await Poll.create({
             question,
             options: options.map(text => ({ text })),
-            expiresAt: new Date(Date.now() + minutes * 60000)
+            expiresAt: new Date(Date.now() + safeMinutes * 60000)
         });
 
         res.status(201).json(poll);
     } catch (err) {
-        console.error("CREATE POLL ERROR:", err);
+        console.error("❌ CREATE POLL ERROR:", err.message);
         res.status(500).json({ error: "Create poll failed" });
     }
 });
@@ -89,9 +101,12 @@ app.post("/api/polls", async (req, res) => {
 app.get("/api/polls/:id", async (req, res) => {
     try {
         const poll = await Poll.findById(req.params.id);
-        if (!poll) return res.status(404).json({ error: "Poll not found" });
+        if (!poll) {
+            return res.status(404).json({ error: "Poll not found" });
+        }
         res.json(poll);
-    } catch {
+    } catch (err) {
+        console.error("❌ FETCH POLL ERROR:", err.message);
         res.status(500).json({ error: "Fetch poll failed" });
     }
 });
@@ -107,8 +122,14 @@ app.post("/api/polls/:id/vote", async (req, res) => {
             return res.status(400).json({ error: "Missing browser ID" });
         }
 
+        if (!Array.isArray(selectedIndexes) || selectedIndexes.length === 0) {
+            return res.status(400).json({ error: "No options selected" });
+        }
+
         const poll = await Poll.findById(req.params.id);
-        if (!poll) return res.status(404).json({ error: "Poll not found" });
+        if (!poll) {
+            return res.status(404).json({ error: "Poll not found" });
+        }
 
         if (Date.now() > new Date(poll.expiresAt).getTime()) {
             return res.status(403).json({ error: "Poll expired" });
@@ -119,7 +140,9 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         }
 
         selectedIndexes.forEach(i => {
-            if (poll.options[i]) poll.options[i].votes += 1;
+            if (poll.options[i]) {
+                poll.options[i].votes += 1;
+            }
         });
 
         poll.votedBy.push(browserId);
@@ -127,7 +150,7 @@ app.post("/api/polls/:id/vote", async (req, res) => {
 
         res.json(poll);
     } catch (err) {
-        console.error("VOTE ERROR:", err);
+        console.error("❌ VOTE ERROR:", err.message);
         res.status(500).json({ error: "Vote failed" });
     }
 });

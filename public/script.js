@@ -90,7 +90,6 @@ function confirmAndStartPoll() {
         .map(input => input.value.trim())
         .filter(value => value !== "");
 
-    // Validation
     if (!question) {
         alert("Please enter a question");
         return;
@@ -106,7 +105,6 @@ function confirmAndStartPoll() {
         return;
     }
 
-    // Show confirmation modal
     const confirmDetails = document.getElementById("confirmDetails");
     confirmDetails.innerHTML = `
         <p><strong>Question:</strong> ${question}</p>
@@ -140,7 +138,7 @@ async function proceedWithPoll() {
         .filter(value => value !== "");
 
     try {
-        const res = await fetch("/api/polls", {
+        const res = await fetch("https://poll-choice.onrender.com/api/polls", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -159,17 +157,14 @@ async function proceedWithPoll() {
 
         const data = await res.json();
         
-        // Debug logs
         console.log("Poll created successfully:", data);
         console.log("Poll ID:", data._id);
         
-        // Generate poll URL
         const pollId = data._id;
         const pollUrl = `${window.location.protocol}//${window.location.host}/poll/${pollId}`;
         
         console.log("Generated URL:", pollUrl);
         
-        // Show success message with share options
         output.innerHTML = `
             <div class="success-box">
                 <h3 style="color: #25d366; margin-top: 0;">✅ Poll Created Successfully!</h3>

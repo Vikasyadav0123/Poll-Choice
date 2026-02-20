@@ -5,25 +5,24 @@ let hasVoted = false;
 
 let timerInterval = null;
 let timerSpan = null;
-
-/* ✅ ADDITION */
 let pollExpired = false;
 
 const output = document.getElementById("output");
 const optionsContainer = document.getElementById("optionsContainer");
 
 /* =======================
-   BROWSER ID (ANTI REFRESH)
+   BROWSER ID
 ======================= */
 const BROWSER_ID_KEY = "poll_browser_id";
 let browserId = localStorage.getItem(BROWSER_ID_KEY);
+
 if (!browserId) {
     browserId = crypto.randomUUID();
     localStorage.setItem(BROWSER_ID_KEY, browserId);
 }
 
 /* =======================
-   CREATE OPTION INPUT
+   OPTION INPUT
 ======================= */
 function createOption(value = "") {
     const wrapper = document.createElement("div");
@@ -48,12 +47,10 @@ function createOption(value = "") {
 
     wrapper.appendChild(input);
     wrapper.appendChild(delBtn);
+
     return wrapper;
 }
 
-/* =======================
-   OPTIONS NORMALIZER
-======================= */
 function normalizeOptions() {
     let rows = [...optionsContainer.children];
 
@@ -68,8 +65,12 @@ function normalizeOptions() {
     rows.forEach(row => {
         const input = row.querySelector("input");
         const btn = row.querySelector(".delete-btn");
-        btn.style.opacity = input.value && row !== last ? "1" : "0";
-        btn.style.pointerEvents = input.value && row !== last ? "auto" : "none";
+
+        btn.style.opacity =
+            input.value && row !== last ? "1" : "0";
+
+        btn.style.pointerEvents =
+            input.value && row !== last ? "auto" : "none";
     });
 
     if (last && last.querySelector("input").value.trim()) {
@@ -78,27 +79,65 @@ function normalizeOptions() {
 }
 
 /* =======================
-   START POLL
+   CONFIRMATION MODAL
 ======================= */
-async function startPoll() {
-    if (isCreatingPoll) return;
-    isCreatingPoll = true;
-
-    pollExpired = false; // ✅ reset flag
-
+function confirmAndStartPoll() {
     const question = document.getElementById("questionInput").value.trim();
-    const options = [...optionsContainer.querySelectorAll("input")]
-        .map(i => i.value.trim())
-        .filter(Boolean);
+    const expiryMinutes = Number(document.getElementById("expiryInput").value);
+    
+    const optionInputs = document.querySelectorAll("#optionsContainer input");
+    const options = Array.from(optionInputs)
+        .map(input => input.value.trim())
+        .filter(value => value !== "");
 
-    if (!question || options.length < 2) {
-        alert("Enter question and at least 2 options");
-        isCreatingPoll = false;
+    // Validation
+    if (!question) {
+        alert("Please enter a question");
         return;
     }
 
-    const minutes = Number(prompt("Poll expiry (minutes)?", "10")) || 10;
-    localStorage.setItem("pollExpiry", Date.now() + minutes * 60000);
+    if (options.length < 2) {
+        alert("Please add at least 2 options");
+        return;
+    }
+
+    if (!expiryMinutes || expiryMinutes <= 0) {
+        alert("Please enter a valid expiry time (greater than 0 minutes)");
+        return;
+    }
+
+    // Show confirmation modal
+    const confirmDetails = document.getElementById("confirmDetails");
+    confirmDetails.innerHTML = `
+        <p><strong>Question:</strong> ${question}</p>
+        <p><strong>Options:</strong></p>
+        <ul>
+            ${options.map(opt => `<li>${opt}</li>`).join('')}
+        </ul>
+        <p><strong>Duration:</strong> ${expiryMinutes} minutes</p>
+        <p style="margin-top: 16px; color: #666;">Are you sure you want to create this poll?</p>
+    `;
+
+    document.getElementById("confirmModal").style.display = "flex";
+}
+
+function closeModal() {
+    document.getElementById("confirmModal").style.display = "none";
+}
+
+/* =======================
+   START POLL (AFTER CONFIRMATION)
+======================= */
+async function proceedWithPoll() {
+    closeModal();
+
+    const question = document.getElementById("questionInput").value.trim();
+    const expiryMinutes = Number(document.getElementById("expiryInput").value);
+    
+    const optionInputs = document.querySelectorAll("#optionsContainer input");
+    const options = Array.from(optionInputs)
+        .map(input => input.value.trim())
+        .filter(value => value !== "");
 
     try {
         const res = await fetch("/api/polls", {
@@ -107,220 +146,110 @@ async function startPoll() {
             body: JSON.stringify({
                 question,
                 options,
-                durationMinutes: minutes
-            })
-        });
-
-        if (!res.ok) throw new Error();
-
-        pollData = await res.json();
-        renderVoteUI();
-        renderShareBox();
-        startExpiryTimer();
-
-        window.open(`/poll/${pollData._id}`, "_blank");
-
-    } catch {
-        alert("Failed to create poll");
-    }
-
-    isCreatingPoll = false;
-}
-
-/* =======================
-   TIMER
-======================= */
-function startExpiryTimer() {
-    if (!timerSpan) {
-        timerSpan = document.createElement("div");
-        timerSpan.style.fontWeight = "600";
-        timerSpan.style.marginTop = "10px";
-    }
-
-    clearInterval(timerInterval);
-
-    timerInterval = setInterval(() => {
-        let expiry = pollData?.expiresAt
-            ? new Date(pollData.expiresAt).getTime()
-            : Number(localStorage.getItem("pollExpiry"));
-
-        const diff = Math.ceil((expiry - Date.now()) / 1000);
-
-        if (diff <= 0) {
-            pollExpired = true; // ✅ mark expired
-            timerSpan.textContent = "⛔ Poll expired";
-            clearInterval(timerInterval);
-            showResults(); // ✅ results ONLY now
-            return;
-        }
-
-        timerSpan.textContent = `⏳ ${Math.floor(diff / 60)}m ${diff % 60}s`;
-    }, 1000);
-}
-
-/* =======================
-   VOTING UI
-======================= */
-function renderVoteUI() {
-    output.innerHTML = "";
-
-    const title = document.createElement("h3");
-    title.textContent = pollData.question;
-    output.appendChild(title);
-
-    pollData.options.forEach((opt, i) => {
-        const row = document.createElement("div");
-        row.className = "result-row";
-        row.textContent = opt.text;
-        row.onclick = () => toggleSelect(i, row);
-        output.appendChild(row);
-    });
-
-    const btn = document.createElement("button");
-    btn.className = "start-btn";
-    btn.textContent = "Submit Vote";
-    btn.onclick = submitVote;
-    output.appendChild(btn);
-
-    output.appendChild(timerSpan);
-}
-
-function toggleSelect(i, el) {
-    if (hasVoted) return;
-
-    selectedIndexes.has(i)
-        ? (selectedIndexes.delete(i), el.classList.remove("selected"))
-        : (selectedIndexes.add(i), el.classList.add("selected"));
-}
-
-/* =======================
-   SUBMIT VOTE
-======================= */
-async function submitVote() {
-    if (hasVoted || selectedIndexes.size === 0) return;
-
-    try {
-        const res = await fetch(`/api/polls/${pollData._id}/vote`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                selectedIndexes: [...selectedIndexes],
+                durationMinutes: expiryMinutes,
                 browserId
             })
         });
 
-        if (!res.ok) throw new Error();
+        if (!res.ok) {
+            const errorData = await res.json();
+            alert(errorData.error || "Failed to create poll");
+            return;
+        }
 
-        pollData = await res.json();
-        hasVoted = true;
+        const data = await res.json();
+        
+        // Debug logs
+        console.log("Poll created successfully:", data);
+        console.log("Poll ID:", data._id);
+        
+        // Generate poll URL
+        const pollId = data._id;
+        const pollUrl = `${window.location.protocol}//${window.location.host}/poll/${pollId}`;
+        
+        console.log("Generated URL:", pollUrl);
+        
+        // Show success message with share options
+        output.innerHTML = `
+            <div class="success-box">
+                <h3 style="color: #25d366; margin-top: 0;">✅ Poll Created Successfully!</h3>
+                
+                <p><strong>Share this poll:</strong></p>
+                
+                <div class="share-input-row">
+                    <input 
+                        id="pollLinkInput" 
+                        value="${pollUrl}" 
+                        readonly
+                        onclick="this.select()"
+                    />
+                    <button class="copy-btn" onclick="copyPollLink()">📋 Copy</button>
+                </div>
 
-        // ❌ DO NOT show results on home page
-        if (pollExpired) showResults();
+                <div class="share-actions">
+                    <a 
+                        href="https://wa.me/?text=${encodeURIComponent('Vote in my poll: ' + pollUrl)}" 
+                        target="_blank" 
+                        class="share-btn whatsapp"
+                    >
+                        📱 WhatsApp
+                    </a>
+                    <a 
+                        href="https://t.me/share/url?url=${encodeURIComponent(pollUrl)}&text=${encodeURIComponent('Vote in my poll!')}" 
+                        target="_blank" 
+                        class="share-btn telegram"
+                    >
+                        ✈️ Telegram
+                    </a>
+                </div>
 
-    } catch {
-        alert("Vote failed");
+                <button class="start-btn" onclick="viewPoll('${pollId}')" style="margin-top: 14px; width: 100%;">
+                    View Poll
+                </button>
+            </div>
+        `;
+
+    } catch (err) {
+        console.error("Create poll error:", err);
+        alert("Server error while creating poll. Check console for details.");
     }
 }
 
 /* =======================
-   SHARE BOX
+   HELPER FUNCTIONS
 ======================= */
-function renderShareBox() {
-    const pollUrl = `${window.location.origin}/poll/${pollData._id}`;
+function copyPollLink() {
+    const input = document.getElementById("pollLinkInput");
+    input.select();
+    input.setSelectionRange(0, 99999);
 
-    const box = document.createElement("div");
-    box.className = "share-box";
+    try {
+        document.execCommand("copy");
+        alert("✅ Poll link copied to clipboard!");
+    } catch (err) {
+        navigator.clipboard.writeText(input.value).then(() => {
+            alert("✅ Poll link copied to clipboard!");
+        }).catch(() => {
+            alert("❌ Failed to copy. Please copy manually.");
+        });
+    }
+}
 
-    box.innerHTML = `
-        <div class="share-input-row">
-            <input type="text" value="${pollUrl}" readonly />
-            <button class="copy-btn">📋</button>
-        </div>
-        <div class="share-actions">
-            <a class="share-btn whatsapp" target="_blank"
-               href="https://wa.me/?text=${encodeURIComponent(pollUrl)}">
-               WhatsApp
-            </a>
-            <a class="share-btn telegram" target="_blank"
-               href="https://t.me/share/url?url=${encodeURIComponent(pollUrl)}">
-               Telegram
-            </a>
-        </div>
-    `;
-
-    const copyBtn = box.querySelector(".copy-btn");
-
-    copyBtn.onclick = async () => {
-        await navigator.clipboard.writeText(pollUrl);
-        copyBtn.textContent = "✔";
-        setTimeout(() => (copyBtn.textContent = "📋"), 1000);
-    };
-
-    output.appendChild(box);
+function viewPoll(pollId) {
+    console.log("Navigating to poll:", pollId);
+    window.location.href = `/poll/${pollId}`;
 }
 
 /* =======================
-   RESULTS
-======================= */
-function showResults() {
-    if (!pollExpired) return; // ✅ BLOCK empty results
-
-    output.innerHTML = "";
-
-    const container = document.createElement("div");
-    container.className = "results-container";
-
-    const heading = document.createElement("h3");
-    heading.textContent = "Results";
-    container.appendChild(heading);
-
-    const total = pollData.options.reduce((s, o) => s + o.votes, 0) || 1;
-
-    pollData.options.forEach(o => {
-        const percent = Math.round((o.votes / total) * 100);
-
-        const box = document.createElement("div");
-        box.className = "result-box";
-
-        box.innerHTML = `
-            <div class="result-top">
-                <span>${o.text}</span>
-                <span>${percent}% (${o.votes})</span>
-            </div>
-            <div class="result-bar">
-                <div class="result-fill" style="width:${percent}%"></div>
-            </div>
-        `;
-
-        container.appendChild(box);
-    });
-
-    output.appendChild(container);
-}
-
-/* =======================
-   RESET
+   RESET POLL
 ======================= */
 function resetPoll() {
-    if (!confirm("Reset poll?")) return;
-
-    clearInterval(timerInterval);
-    timerInterval = null;
-    timerSpan = null;
-
-    pollExpired = false;
-
-    pollData = null;
-    hasVoted = false;
-    selectedIndexes.clear();
-    localStorage.removeItem("pollExpiry");
-
-    output.innerHTML = "";
     document.getElementById("questionInput").value = "";
-
+    document.getElementById("expiryInput").value = "10";
     optionsContainer.innerHTML = "";
     optionsContainer.appendChild(createOption());
     optionsContainer.appendChild(createOption());
+    output.innerHTML = "";
 }
 
 /* =======================

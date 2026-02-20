@@ -39,14 +39,15 @@ mongoose
 const PollSchema = new mongoose.Schema({
     question: String,
     options: [
-        {
-            text: String,
-            votes: { type: Number, default: 0 }
-        }
+        { text: String, votes: { type: Number, default: 0 } }
     ],
     votedBy: {
         type: [String],
         default: []
+    },
+    createdBy: {
+        type: String,
+        required: true
     },
     createdAt: {
         type: Date,
@@ -65,27 +66,24 @@ const Poll = mongoose.model("Poll", PollSchema);
 ======================= */
 app.post("/api/polls", async (req, res) => {
     try {
-        console.log("📩 CREATE POLL BODY:", req.body);
+        const { question, options, durationMinutes, browserId } = req.body;
 
-        const { question, options, durationMinutes } = req.body;
-
-        // ✅ STRONG VALIDATION (FIXES FAILED CREATE)
         if (
             !question ||
             !Array.isArray(options) ||
             options.length < 2 ||
-            options.some(o => typeof o !== "string" || !o.trim())
+            !browserId
         ) {
             return res.status(400).json({ error: "Invalid poll data" });
         }
 
-        const minutes = Number(durationMinutes);
-        const safeMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 10;
+        const minutes = Number(durationMinutes) || 10;
 
         const poll = await Poll.create({
             question,
             options: options.map(text => ({ text })),
-            expiresAt: new Date(Date.now() + safeMinutes * 60000)
+            createdBy: browserId,
+            expiresAt: new Date(Date.now() + minutes * 60000)
         });
 
         res.status(201).json(poll);
@@ -96,17 +94,45 @@ app.post("/api/polls", async (req, res) => {
 });
 
 /* =======================
+   UPDATE EXPIRY (CREATOR ONLY)
+======================= */
+/* =======================
+   UPDATE EXPIRY (CREATOR ONLY)
+======================= */
+app.post("/api/polls/:id/expiry", async (req, res) => {
+    try {
+        const { minutes, browserId } = req.body;
+
+        if (!Number.isFinite(minutes) || minutes <= 0) {
+            return res.status(400).json({ error: "Invalid expiry time" });
+        }
+
+        const poll = await Poll.findById(req.params.id);
+        if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+        if (poll.createdBy !== browserId) {
+            return res.status(403).json({ error: "Not allowed" });
+        }
+
+        poll.expiresAt = new Date(Date.now() + minutes * 60000);
+        await poll.save();
+
+        res.json(poll);
+    } catch (err) {
+        console.error("❌ EXPIRY UPDATE ERROR:", err.message);
+        res.status(500).json({ error: "Expiry update failed" });
+    }
+});
+
+/* =======================
    GET POLL
 ======================= */
 app.get("/api/polls/:id", async (req, res) => {
     try {
         const poll = await Poll.findById(req.params.id);
-        if (!poll) {
-            return res.status(404).json({ error: "Poll not found" });
-        }
+        if (!poll) return res.status(404).json({ error: "Poll not found" });
         res.json(poll);
-    } catch (err) {
-        console.error("❌ FETCH POLL ERROR:", err.message);
+    } catch {
         res.status(500).json({ error: "Fetch poll failed" });
     }
 });
@@ -122,16 +148,10 @@ app.post("/api/polls/:id/vote", async (req, res) => {
             return res.status(400).json({ error: "Missing browser ID" });
         }
 
-        if (!Array.isArray(selectedIndexes) || selectedIndexes.length === 0) {
-            return res.status(400).json({ error: "No options selected" });
-        }
-
         const poll = await Poll.findById(req.params.id);
-        if (!poll) {
-            return res.status(404).json({ error: "Poll not found" });
-        }
+        if (!poll) return res.status(404).json({ error: "Poll not found" });
 
-        if (Date.now() > new Date(poll.expiresAt).getTime()) {
+        if (Date.now() > poll.expiresAt.getTime()) {
             return res.status(403).json({ error: "Poll expired" });
         }
 
@@ -140,9 +160,7 @@ app.post("/api/polls/:id/vote", async (req, res) => {
         }
 
         selectedIndexes.forEach(i => {
-            if (poll.options[i]) {
-                poll.options[i].votes += 1;
-            }
+            if (poll.options[i]) poll.options[i].votes += 1;
         });
 
         poll.votedBy.push(browserId);

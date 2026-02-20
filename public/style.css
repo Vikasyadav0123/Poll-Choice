@@ -78,10 +78,16 @@ button {
     border-radius: 999px;
     padding: 9px 18px;
     font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
 }
 
 button:active {
     transform: scale(0.96);
+}
+
+button:hover {
+    opacity: 0.9;
 }
 
 .start-btn {
@@ -101,20 +107,175 @@ button:disabled {
 }
 
 /* =======================
+   CONFIRMATION MODAL
+======================= */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background: white;
+    padding: 24px;
+    border-radius: 14px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    color: #333;
+}
+
+.modal-content ul {
+    margin: 8px 0;
+    padding-left: 24px;
+}
+
+.modal-content li {
+    margin: 4px 0;
+    color: #555;
+}
+
+.modal-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.modal-actions button {
+    flex: 1;
+}
+
+/* =======================
+   SUCCESS BOX
+======================= */
+.success-box {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f0fdf4;
+    border: 2px solid #25d366;
+    border-radius: 14px;
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =======================
+   SHARE COMPONENTS
+======================= */
+.share-input-row {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.share-input-row input {
+    flex: 1;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.copy-btn {
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    background: #e9ecef;
+    border: 1px solid #d1d7db;
+    white-space: nowrap;
+}
+
+.copy-btn:hover {
+    background: #dee2e6;
+}
+
+.share-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.share-btn {
+    flex: 1;
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-size: 14px;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    text-align: center;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+.share-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.share-btn.whatsapp {
+    background: #25d366;
+}
+
+.share-btn.telegram {
+    background: #229ed9;
+}
+
+/* =======================
    VOTING OPTIONS
 ======================= */
 .result-row {
-    padding: 12px;
+    padding: 14px;
     border-radius: 12px;
     background: #f7f8fa;
     margin-bottom: 10px;
     cursor: pointer;
-    border: 2px solid #ddd;
+    border: 2px solid #e0e0e0;
+    transition: all 0.2s;
+    font-size: 15px;
+}
+
+.result-row:hover {
+    border-color: #25d366;
+    background: #f0fdf4;
 }
 
 .result-row.selected {
     background: #d1f7e3;
     border-color: #25d366;
+    font-weight: 500;
 }
 
 /* =======================
@@ -122,53 +283,185 @@ button:disabled {
 ======================= */
 .timer-box {
     background: #fff3cd;
-    border: 1px solid #ffeeba;
+    border: 2px solid #ffc107;
     color: #856404;
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 12px;
     margin-bottom: 14px;
     font-weight: 600;
+    text-align: center;
+    font-size: 15px;
+    transition: all 0.3s;
 }
 
 /* =======================
-   RESULTS
+   RESULTS - WhatsApp Style
 ======================= */
 .results-container {
     margin-top: 16px;
-    background: #ffffff;
-    border-radius: 14px;
-    padding: 14px;
-    border: 1px solid #e0e0e0;
+    animation: fadeIn 0.5s ease;
 }
 
+/* =======================
+   QUESTION BOX (NEW!)
+======================= */
+.question-box {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+}
+
+.question-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1976d2;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.question-text {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0d47a1;
+    line-height: 1.4;
+}
+
+/* =======================
+   VOTE COUNT & RESULTS HEADING (NEW!)
+======================= */
+.vote-count-text {
+    color: #666;
+    font-size: 14px;
+    margin: 0 0 16px 0;
+    font-weight: 500;
+}
+
+.results-heading {
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* =======================
+   RESULT BOXES
+======================= */
 .result-box {
-    background: #f7f8fa;
+    background: #ffffff;
     border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 10px;
-    border: 1px solid #e0e0e0;
+    padding: 14px;
+    margin-bottom: 12px;
+    border: 2px solid #e0e0e0;
+    transition: all 0.3s;
+}
+
+.result-box:hover {
+    border-color: #25d366;
+    box-shadow: 0 2px 8px rgba(37, 211, 102, 0.1);
+}
+
+.result-box.winner {
+    border-color: #25d366;
+    background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.2);
 }
 
 .result-top {
     display: flex;
     justify-content: space-between;
-    font-weight: 600;
-    margin-bottom: 6px;
+    align-items: center;
+    font-weight: 500;
+    margin-bottom: 10px;
+    font-size: 15px;
+}
+
+.option-name {
+    flex: 1;
+    color: #333;
+}
+
+.vote-stats {
+    color: #666;
+    font-size: 14px;
+    white-space: nowrap;
+    margin-left: 12px;
 }
 
 .result-bar {
     width: 100%;
-    height: 8px;
-    background: #e6e6e6;
+    height: 10px;
+    background: #e9ecef;
     border-radius: 999px;
     overflow: hidden;
+    position: relative;
 }
 
 .result-fill {
     height: 100%;
-    background: linear-gradient(90deg, #25d366, #6be585);
+    background: linear-gradient(90deg, #25d366 0%, #20c997 100%);
     border-radius: 999px;
-    transition: width 0.6s ease;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    box-shadow: 0 2px 4px rgba(37, 211, 102, 0.3);
+}
+
+.result-box.winner .result-fill {
+    background: linear-gradient(90deg, #25d366 0%, #1db954 100%);
+    box-shadow: 0 2px 6px rgba(37, 211, 102, 0.5);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.85;
+    }
+}
+
+.winner-badge {
+    background: #25d366;
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+    font-weight: 600;
+    display: inline-block;
+    animation: bounceIn 0.5s ease;
+}
+
+/* =======================
+   TIE BADGE
+======================= */
+.tie-badge {
+    background: #ffc107;
+    color: #000;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+    font-weight: 600;
+    display: inline-block;
+    animation: bounceIn 0.5s ease;
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 /* =======================
@@ -179,48 +472,39 @@ button:disabled {
 }
 
 /* =======================
-   SHARE BOX (ADD THIS)
+   SPACING UTILITIES
 ======================= */
-.share-box {
-    margin-top: 14px;
+.mt-3 {
+    margin-top: 16px;
+    display: block;
 }
 
-.share-input-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
-}
+/* =======================
+   MOBILE RESPONSIVE
+======================= */
+@media (max-width: 480px) {
+    body {
+        padding: 12px;
+    }
 
-.share-input-row input {
-    flex: 1;
-}
+    .card,
+    .poll-card {
+        padding: 14px;
+    }
 
-.copy-btn {
-    border-radius: 10px;
-    padding: 0 14px;
-    font-size: 16px;
-    cursor: pointer;
-    background: #e9ecef;
-}
+    .modal-content {
+        padding: 20px;
+    }
 
-.share-actions {
-    display: flex;
-    gap: 10px;
-}
+    .share-actions {
+        flex-direction: column;
+    }
 
-.share-btn {
-    border-radius: 999px;
-    padding: 8px 16px;
-    font-size: 14px;
-    color: #fff;
-    text-decoration: none;
-    font-weight: 600;
-}
+    .share-btn {
+        width: 100%;
+    }
 
-.share-btn.whatsapp {
-    background: #25d366;
-}
-
-.share-btn.telegram {
-    background: #229ed9;
+    .question-text {
+        font-size: 16px;
+    }
 }

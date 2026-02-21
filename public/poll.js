@@ -14,13 +14,26 @@ if (!match) {
 }
 
 const pollId = match[1];
-const browserId = localStorage.getItem("poll_browser_id");
+
+let browserId = localStorage.getItem("poll_browser_id");
+if (!browserId) {
+    browserId = crypto.randomUUID();
+    localStorage.setItem("poll_browser_id", browserId);
+}
 
 /* =======================
    LOAD POLL
 ======================= */
 async function loadPoll() {
-    const res = await fetch(`/api/polls/${pollId}`);
+    const res = await fetch(
+        `https://poll-choice.onrender.com/api/polls/${pollId}`
+    );
+
+    if (!res.ok) {
+        output.textContent = "Failed to load poll";
+        return;
+    }
+
     pollData = await res.json();
 
     renderTimer();
@@ -51,13 +64,11 @@ function startTimer() {
     clearInterval(timerInterval);
 
     timerInterval = setInterval(() => {
-        const diffMs = new Date(pollData.expiresAt).getTime() - Date.now();
+        const diffMs =
+            new Date(pollData.expiresAt).getTime() - Date.now();
 
         if (diffMs <= 0) {
             timerSpan.textContent = "⛔ Poll expired";
-            timerSpan.style.background = "#ffe0e0";
-            timerSpan.style.borderColor = "#dc3545";
-            timerSpan.style.color = "#721c24";
             clearInterval(timerInterval);
             showResults();
             return;
@@ -92,13 +103,17 @@ function renderVoting() {
 }
 
 function toggleSelect(i, row) {
-    selectedIndexes.has(i)
-        ? (selectedIndexes.delete(i), row.classList.remove("selected"))
-        : (selectedIndexes.add(i), row.classList.add("selected"));
+    if (selectedIndexes.has(i)) {
+        selectedIndexes.delete(i);
+        row.classList.remove("selected");
+    } else {
+        selectedIndexes.add(i);
+        row.classList.add("selected");
+    }
 }
 
 /* =======================
-   SUBMIT VOTE
+   SUBMIT VOTE (FIXED ROUTE)
 ======================= */
 async function submitVote() {
     if (selectedIndexes.size === 0) {
@@ -106,14 +121,21 @@ async function submitVote() {
         return;
     }
 
-    const res = await fetch(`/api/polls/${pollId}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedIndexes: [...selectedIndexes], browserId })
-    });
+    const res = await fetch(
+        `https://poll-choice.onrender.com/api/polls/${pollId}/vote`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                selectedIndexes: [...selectedIndexes],
+                browserId
+            })
+        }
+    );
 
     if (!res.ok) {
-        alert("Already voted or poll expired");
+        const errorData = await res.json();
+        alert(errorData.error || "Vote failed");
         return;
     }
 
@@ -122,16 +144,14 @@ async function submitVote() {
 }
 
 /* =======================
-   RESULTS - WhatsApp Style (FIXED)
+   RESULTS
 ======================= */
 function showResults() {
     output.innerHTML = "";
 
-    // Results container
     const container = document.createElement("div");
     container.className = "results-container";
 
-    // Question heading - CLEARLY STYLED
     const questionBox = document.createElement("div");
     questionBox.className = "question-box";
     questionBox.innerHTML = `
@@ -140,42 +160,24 @@ function showResults() {
     `;
     container.appendChild(questionBox);
 
-    // Vote count
-    const totalVotes = pollData.options.reduce((sum, o) => sum + o.votes, 0);
-    const voteCount = document.createElement("p");
-    voteCount.className = "vote-count-text";
-    voteCount.textContent = `${totalVotes} ${totalVotes === 1 ? 'person' : 'people'} voted`;
-    container.appendChild(voteCount);
+    const totalVotes = pollData.options.reduce(
+        (sum, o) => sum + o.votes,
+        0
+    );
 
-    // Results heading
-    const resultsHeading = document.createElement("div");
-    resultsHeading.className = "results-heading";
-    resultsHeading.textContent = "Results:";
-    container.appendChild(resultsHeading);
-
-    // Find max votes for highlighting winner
-    const maxVotes = Math.max(...pollData.options.map(o => o.votes));
-    
-    // Count how many options have max votes (to detect ties)
-    const winnersCount = pollData.options.filter(o => o.votes === maxVotes).length;
-    const isTie = winnersCount > 1 && maxVotes > 0;
-
-    // Create result boxes
     pollData.options.forEach(option => {
-        const percentage = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
-        const isWinner = option.votes === maxVotes && maxVotes > 0 && !isTie;
+        const percentage =
+            totalVotes > 0
+                ? Math.round((option.votes / totalVotes) * 100)
+                : 0;
 
         const box = document.createElement("div");
-        box.className = "result-box" + (isWinner ? " winner" : "");
+        box.className = "result-box";
 
         box.innerHTML = `
             <div class="result-top">
-                <span class="option-name">
-                    ${option.text}
-                    ${isWinner ? '<span class="winner-badge">🏆 Winner</span>' : ''}
-                    ${isTie && option.votes === maxVotes && maxVotes > 0 ? '<span class="tie-badge">🤝 Tie</span>' : ''}
-                </span>
-                <span class="vote-stats">${percentage}% (${option.votes})</span>
+                <span>${option.text}</span>
+                <span>${percentage}% (${option.votes})</span>
             </div>
             <div class="result-bar">
                 <div class="result-fill" style="width: ${percentage}%"></div>
@@ -186,31 +188,6 @@ function showResults() {
     });
 
     output.appendChild(container);
-
-    // Show "Create New Poll" button if poll creator and poll expired
-    if (pollData.createdBy === browserId && isExpired()) {
-        const newPollBtn = document.createElement("button");
-        newPollBtn.className = "start-btn";
-        newPollBtn.textContent = "🔄 Create New Poll";
-        newPollBtn.style.marginTop = "16px";
-        newPollBtn.style.width = "100%";
-        newPollBtn.onclick = confirmNewPoll;
-        output.appendChild(newPollBtn);
-    }
-}
-
-/* =======================
-   CREATE NEW POLL (AFTER EXPIRY)
-======================= */
-function confirmNewPoll() {
-    const confirmed = confirm(
-        "Do you want to create a new poll?\n\n" +
-        "You will be redirected to the poll creation page."
-    );
-    
-    if (confirmed) {
-        window.location.href = "/";
-    }
 }
 
 /* =======================

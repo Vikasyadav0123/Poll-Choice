@@ -17,3 +17,22 @@ You're about to initialize a Firebase project in this directory:
 
   E:\Python\Projects\POLL CHOICE Works
 
+[debug] [2026-02-21T06:00:44.555Z] ----------------------------------------------------------------------
+[debug] [2026-02-21T06:00:44.559Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\YADAV\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2026-02-21T06:00:44.560Z] CLI Version:   15.7.0
+[debug] [2026-02-21T06:00:44.560Z] Platform:      win32
+[debug] [2026-02-21T06:00:44.560Z] Node Version:  v22.14.0
+[debug] [2026-02-21T06:00:44.561Z] Time:          Sat Feb 21 2026 11:30:44 GMT+0530 (India Standard Time)
+[debug] [2026-02-21T06:00:44.561Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  E:\Python\Projects\POLL CHOICE Works
+
